@@ -24,6 +24,22 @@ namespace MedicalAutoFillTool;
 ///  6. Khớp cột theo TÊN (header) chứ không theo vị trí cố định.
 ///  7. Báo cáo chi tiết từng trường: OK / không thấy ô / ghi lỗi / thiếu dữ liệu.
 ///  8. Ghi log ra file để truy lại đúng lần bị lỗi.
+///
+/// NHÓM SỬA LỖI "TRANG TRẮNG TRONG WEBVIEW, LÚC ĐƯỢC LÚC KHÔNG":
+///  9.  Timeout + retry 3 lần cho tạo môi trường / khởi tạo WebView2 (trước đây treo
+///      là trắng vô thời hạn, không hộp lỗi). Dọn file khoá profile còn sót (Singleton*)
+///      trước khi khởi động; lần cuối cùng xoá hẳn profile.
+/// 10. Điều hướng đầu tiên (trang chủ) dời tới SAU KHI cửa sổ vẽ xong (Shown) — navigate
+///      lúc cửa sổ chưa paint xong là thủ phạm rất hay gặp của lần paint đầu trắng.
+/// 11. Chống webview bị kéo về about:blank khi trang xin mở popup rỗng (window.open()),
+///      chỉ tiếp quản popup http(s) thật. Có log MỌI điều hướng (NavigationStarting).
+/// 12. "Tải xong mà trang trắng" (renderer không render) -> tự Reload tối đa 2 lần/URL,
+///      hết thì báo rõ — thay vì hiện "✅ Sẵn sàng" trong khi màn trắng.
+/// 13. Chế độ ổn định (mặc định bật): khởi Chromium với --disable-gpu để không phụ thuộc
+///      driver đồ hoạ (máy cũ/remote desktop hay chết renderer -> trắng). Tắt được trong
+///      Cài đặt nếu máy đồ hoạ khoẻ.
+/// 14. Khôi phục sau khi renderer chết: gỡ hết event cũ trước khi dispose, không điều
+///      hướng đôi (home rồi lại url cũ), có chặn vòng lặp (3 lần chết/60 giây -> dừng).
 /// </summary>
 public partial class Form1 : Form
 {
@@ -54,6 +70,23 @@ public partial class Form1 : Form
     private string _lastClipHash = "";
     private int _oneClickRow;
     private bool _oneClickActive;
+
+    // ---------------------------------------------------------------------
+    // Chống lỗi "trắng trang trong webview, lúc được lúc không"
+    // ---------------------------------------------------------------------
+
+    /// <summary>User đã gõ URL trước khi core sẵn sàng (Navigate() đã đặt Source).
+    /// Nếu đặt cờ này thì KHÔNG điều hướng về trang chủ lần đầu — control tự
+    /// điều hướng tới URL đã xếp hàng khi init xong, tránh đè mất URL của user.</summary>
+    private bool _urlQueuedBeforeCore;
+
+    /// <summary>Số lần tự tải lại cho từng URL bị "tải xong mà trang trắng" (tối đa 2 lần/URL).</summary>
+    private readonly Dictionary<string, int> _blankReloads = new();
+
+    /// <summary>Đếm số lần renderer chết liên tiếp để KHÔNG lặp vòng khôi phục vô hạn
+    /// (máy driver đồ hoạ lỗi cứ chết -> cứ dựng lại -> user chỉ thấy trắng liên tục).</summary>
+    private int _rendererFailCount;
+    private DateTime _rendererFailWindowUtc = DateTime.MinValue;
 
     // ---------------------------------------------------------------- Khởi tạo
     public Form1()
@@ -303,20 +336,74 @@ public partial class Form1 : Form
     }
 
     // ------------------------------------------------------------- WebView2
-    private async Task InitializeWebViewAsync()
+    /// <summary>
+    /// Khởi tạo WebView2. Có retry + timeout cho 2 bước hay "treo" nhất:
+    ///   - CreateAsync: antivirus quét thư mục profile, ổ đĩa chậm, khoá profile còn sót.
+    ///   - EnsureCoreWebView2Async: lần đầu tạo profile, máy yếu, driver đồ hoạ lỗi.
+    /// Trước đây 2 bước này KHÔNG có timeout: treo 1 phút là webview trắng vô thời hạn,
+    /// không có hộp lỗi nào cả -> user chỉ thấy "lúc được lúc không".
+    /// </summary>
+    private async Task InitializeWebViewAsync(bool navigateHome = true)
     {
         if (_webView == null) return;
         try
         {
             SetStatus("⏳ Đang chuẩn hoá môi trường WebView2...");
 
+            var folder = AppPaths.WebView2UserDataFolder;
+
+            // [chống trắng trang 1] Xoá file khoá Chromium còn sót từ lần app bị
+            // crash / tắt mạnh (task manager). Nếu còn Singleton*, WebView2 coi profile
+            // đang "được dùng bởi tiến trình khác" -> init treo/lỗi -> webview trắng
+            // mà không báo gì. An toàn: mutex single-instance đã đảm bảo chỉ đúng
+            // tiến trình này đang dùng profile.
+            CleanStaleProfileLocks(folder);
+
+            var envOptions = new CoreWebView2EnvironmentOptions
+            {
+                // [chống trắng trang 2] Chế độ ổn định (mặc định BẬT): không dùng GPU để
+                // ghép hình. Máy văn phòng có driver đồ hoạ cũ / remote desktop hay bị
+                // tiến trình render chết giữa chừng -> trang trắng. Tắt GPU thì tải trang
+                // chậm hơn chút xíu nhưng gần như không bao giờ trắng.
+                // (bật/tắt trong Cài đặt — hiệu lực khi khởi động lại)
+                AdditionalBrowserArguments = _config.DisableGpu ? "--disable-gpu" : null
+            };
+
             // UserDataFolder PHẢI ghi được: bản cũ không truyền tham số này nên khi
             // .exe nằm trong Program Files/IIS, WebView2 không khởi tạo được và
             // cửa sổ cứ trắng (người dùng chỉ thấy "phần mềm không chạy").
-            var env = await CoreWebView2Environment.CreateAsync(
-                null, AppPaths.WebView2UserDataFolder, new CoreWebView2EnvironmentOptions());
+            // Tạo môi trường tối đa 3 lần: sạch -> dọn khoá -> xoá hẳn profile.
+            var env = await CreateEnvWithRetryAsync(folder, envOptions);
 
-            await _webView.EnsureCoreWebView2Async(env);
+            // Khởi tạo control tối đa 3 lần; từ lần 2 trở đi DÙNG CONTROL MỚI
+            // (WebView2 không cho init lại control đã fail — y hệt đường khôi phục
+            // sau ProcessFailed bên dưới).
+            Exception? lastErr = null;
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                try
+                {
+                    SetStatus("⏳ Đang khởi tạo trình duyệt nhúng (lần " + attempt + "/3)...");
+                    await WithTimeout(_webView.EnsureCoreWebView2Async(env), 90_000,
+                        "khởi tạo trình duyệt nhúng WebView2");
+                    lastErr = null;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    lastErr = ex;
+                    AppLogger.Error("Khởi tạo WebView2 thất bại (lần " + attempt + "/3)", ex);
+                    if (attempt >= 3) break;
+
+                    SetStatus("⚠ Khởi tạo WebView2 lỗi — đang thử lại (lần " + (attempt + 1) + "/3)...");
+                    if (attempt == 2) CleanStaleProfileLocks(folder);
+                    else WipeProfile(folder);
+                    ReplaceWebViewControl();
+                    await Task.Delay(500);
+                }
+            }
+            if (lastErr != null) throw lastErr;
+
             var core = _webView.CoreWebView2;
             if (core == null) throw new InvalidOperationException("Không lấy được CoreWebView2 sau khi khởi tạo.");
 
@@ -335,6 +422,7 @@ public partial class Form1 : Form
             _engineJs ??= EngineScript.Load();
             await core.AddScriptToExecuteOnDocumentCreatedAsync(_engineJs);
 
+            core.NavigationStarting += Core_NavigationStarting;
             core.NavigationCompleted += Core_NavigationCompleted;
             core.SourceChanged += (_, _) => UpdateAddressBar();
             core.WebMessageReceived += Core_WebMessageReceived;
@@ -349,20 +437,200 @@ public partial class Form1 : Form
             core.FrameCreated += Core_FrameCreated;
 
             _coreReady = true;
-            AppLogger.Info("WebView2 sẵn sàng. UserDataFolder=" + AppPaths.WebView2UserDataFolder);
+            AppLogger.Info("WebView2 sẵn sàng. UserDataFolder=" + folder +
+                           (_config.DisableGpu ? " [chế độ ổn định: --disable-gpu]" : ""));
 
             if (_config.OpenDevToolsOnStart && _config.AllowDevTools)
             {
                 try { core.OpenDevToolsWindow(); } catch { }
             }
 
-            NavigateHome();
+            // [chống trắng trang 3] Điều hướng đầu tiên làm SAU KHI cửa sổ đã vẽ xong.
+            // Navigate ngay khi EnsureCoreWebView2Async vừa xong (cửa sổ chưa shown,
+            // controller vừa mới được tạo) là nguyên nhân rất hay gặp của lần paint đầu
+            // trắng trống; bấm ⟳ (F5) lại thì có — đúng kiểu "lúc được lúc không".
+            ScheduleInitialNavigation(navigateHome);
         }
         catch (Exception ex)
         {
             _coreReady = false;
             AppLogger.Error("Khởi tạo WebView2 thất bại", ex);
             HandleWebViewInitFailure(ex);
+        }
+    }
+
+    // ------------------------------------------------- Helpers chống trắng trang
+
+    /// <summary>Overload cho task không có kết quả — WinForms' EnsureCoreWebView2Async
+    /// trả về Task thường (không Task&lt;T&gt;).</summary>
+    private static Task WithTimeout(Task task, int timeoutMs, string what) =>
+        WithTimeoutCore(task, timeoutMs, what);
+
+    /// <summary>Chạy task với timeout. WebView2 KHÔNG có CancellationToken, nên khi
+    /// timeout ta ném TimeoutException nhưng GIỮ SỰ THAM CHIẾU task cũ để nuốt lỗi
+    /// của nó (khi task cũ về sau, control có thể đã bị dispose -> ObjectDisposedException
+    /// không được phép xuất hiện như "lỗi lạ" trong log).</summary>
+    private static async Task<T> WithTimeout<T>(Task<T> task, int timeoutMs, string what)
+    {
+        await WithTimeoutCore(task, timeoutMs, what);
+        return await task; // task đã hoàn thành (hoặc exception gốc đã được rethrow ở Core)
+    }
+
+    private static async Task WithTimeoutCore(Task task, int timeoutMs, string what)
+    {
+        var completed = await Task.WhenAny(task, Task.Delay(timeoutMs));
+        if (ReferenceEquals(completed, task))
+        {
+            await task; // rethrow original exception (if any)
+            return;
+        }
+        _ = task.ContinueWith(t =>
+        {
+            if (t.Exception != null)
+                AppLogger.Debug("Task WebView2 cũ kết thúc sau timeout: " +
+                                t.Exception.GetBaseException().Message);
+        }, TaskScheduler.Default);
+        throw new TimeoutException(what + " quá " + (timeoutMs / 1000) +
+            " giây chưa xong (thường do antivirus đang quét file, ổ đĩa chậm, hoặc profile lỗi).");
+    }
+
+    /// <summary>Tạo môi trường WebView2, tối đa 3 lần:
+    /// lần 1 sạch -> lần 2 dọn file khoá -> lần 3 xoá hẳn profile (phải đăng nhập lại
+    /// medinet, chỉ dùng khi không còn cách nào khác).</summary>
+    private async Task<CoreWebView2Environment> CreateEnvWithRetryAsync(
+        string folder, CoreWebView2EnvironmentOptions options)
+    {
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            try
+            {
+                return await WithTimeout(
+                    CoreWebView2Environment.CreateAsync(null, folder, options),
+                    60_000, "tạo môi trường WebView2");
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("Tạo môi trường WebView2 thất bại (lần " + attempt + "/3)", ex);
+                if (attempt >= 3) throw;
+                SetStatus("⚠ Tạo môi trường WebView2 lỗi — đang thử lại (lần " + (attempt + 1) + "/3)...");
+                if (attempt == 2) CleanStaleProfileLocks(folder);
+                else WipeProfile(folder);
+                await Task.Delay(500);
+            }
+        }
+        throw new InvalidOperationException("Không tạo được môi trường WebView2 (không tới được đây).");
+    }
+
+    /// <summary>
+    /// Xoá file khoá Chromium còn sót (SingletonLock/SingletonCookie/SingletonSocket).
+    /// Chúng chỉ là "ai đang giữ profile" — an toàn xoá khi app của ta là tiến trình
+    /// duy nhất dùng profile (mutex single-instance đã chặn trường hợp ngược lại).
+    /// </summary>
+    private static void CleanStaleProfileLocks(string folder)
+    {
+        try
+        {
+            foreach (var name in new[] { "SingletonLock", "SingletonCookie", "SingletonSocket" })
+            {
+                var p = Path.Combine(folder, name);
+                if (!File.Exists(p)) continue;
+                File.Delete(p);
+                AppLogger.Info("Đã xoá file khoá profile WebView2 còn sót: " + name);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Warn("Không xoá được file khoá profile cũ: " + ex.Message);
+        }
+    }
+
+    /// <summary>Xoá TOÀN BỘ profile WebView2 (biện pháp cuối cùng khi profile "chết lâm
+    /// sàng"). Hệ quả: phải đăng nhập lại medinet. Gọi khi đã thử 2 lần không thành.</summary>
+    private static void WipeProfile(string folder)
+    {
+        AppLogger.Warn("XOÁ TOÀN BỘ profile WebView2 (phải đăng nhập lại medinet): " + folder);
+        try
+        {
+            Directory.Delete(folder, recursive: true);
+            Directory.CreateDirectory(folder);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Không xoá được profile WebView2", ex);
+        }
+    }
+
+    /// <summary>
+    /// Tạo control WebView2 MỚI thay control cũ (dùng khi init fail hoặc renderer chết).
+    /// Control mới đặt ở index 0 để Dock=Fill không che các thanh. Trước khi dispose
+    /// control cũ thì GỠ HẾT event handler — để không nhận thêm sự kiện từ webview
+    /// đang "chết" (vd ProcessFailed phát lại trong lúc dispose -> vòng lặp khôi phục).
+    /// </summary>
+    private void ReplaceWebViewControl()
+    {
+        _coreReady = false;
+        var old = _webView;
+        _webView = new WebView2 { Dock = DockStyle.Fill };
+        Controls.Add(_webView);
+        Controls.SetChildIndex(_webView, 0);
+
+        if (old != null)
+        {
+            UnhookCoreEvents(old);
+            try { old.Dispose(); } catch { }   // tự huỷ cả CoreWebView2
+            try { Controls.Remove(old); } catch { }
+        }
+    }
+
+    /// <summary>Gỡ MỌI handler khỏi core của một control sắp bị dispose (event -= null
+    /// là cú pháp hợp lệ để rỗng danh sách subscriber).</summary>
+    private static void UnhookCoreEvents(WebView2 wv)
+    {
+        try
+        {
+            wv.KeyDown -= null;
+            var core = wv.CoreWebView2;
+            if (core == null) return;
+            core.NavigationStarting -= null;
+            core.NavigationCompleted -= null;
+            core.SourceChanged -= null;
+            core.WebMessageReceived -= null;
+            core.PermissionRequested -= null;
+            core.NewWindowRequested -= null;
+            core.ProcessFailed -= null;
+            core.DocumentTitleChanged -= null;
+            core.FrameCreated -= null;
+        }
+        catch { }
+    }
+
+    /// <summary>Đặt lịch điều hướng ĐẦU TIÊN (trang chủ). Chỉ chạy khi thực sự cần:
+    /// user đã tự gõ URL từ trước (Source đã xếp hàng) thì không được đè.</summary>
+    private void ScheduleInitialNavigation(bool navigateHome)
+    {
+        if (!navigateHome) return;
+
+        if (_urlQueuedBeforeCore)
+        {
+            _urlQueuedBeforeCore = false;
+            AppLogger.Info("User đã đặt URL từ trước core sẵn sàng — bỏ qua điều hướng trang chủ.");
+            return;
+        }
+        if (IsDisposed) return;
+
+        if (IsHandleCreated)
+        {
+            BeginInvoke(new Action(NavigateHome));
+        }
+        else
+        {
+            // Chờ cửa sổ paint xong (Shown) rồi mới navigate — tránh lần paint đầu trắng.
+            void OnShown(object? s, EventArgs e)
+            {
+                Shown -= OnShown;
+                if (!IsDisposed) NavigateHome();
+            }
+            Shown += OnShown;
         }
     }
 
@@ -388,6 +656,14 @@ public partial class Form1 : Form
         else
         {
             sb.AppendLine("Chi tiết: " + msg);
+            if (ex is TimeoutException)
+            {
+                sb.AppendLine();
+                sb.AppendLine("Nguyên nhân thường gặp: antivirus (Kaspersky/Bitdefender/Windows Defender)");
+                sb.AppendLine("đang quét thư mục dữ liệu của WebView2 làm khởi tạo bị treo.");
+                sb.AppendLine("Cách xử lý: thêm NƠI NÀY vào danh sách ngoại lệ của antivirus:");
+                sb.AppendLine(AppPaths.WebView2UserDataFolder);
+            }
         }
         sb.AppendLine();
         sb.AppendLine("Nếu đã cài Runtime mà vẫn lỗi, thử chạy phần mềm bằng quyền Administrator");
@@ -430,6 +706,25 @@ public partial class Form1 : Form
             kind == CoreWebView2ProcessFailedKind.BrowserProcessExited ||
             kind == CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
         {
+            // CHỐNG VÒNG LẶP: máy có driver đồ hoạ lỗi thì renderer chết liên tục.
+            // Nếu cứ tự dựng lại vô hạn, user chỉ thấy trang trắng nhấp nháy không sao
+            // thoát ra. 3 lần chết trong 60 giây -> dừng tự khôi phục, báo rõ.
+            if ((DateTime.UtcNow - _rendererFailWindowUtc).TotalSeconds > 60)
+            {
+                _rendererFailWindowUtc = DateTime.UtcNow;
+                _rendererFailCount = 0;
+            }
+            _rendererFailCount++;
+            if (_rendererFailCount >= 3)
+            {
+                AppLogger.Error("Renderer chết " + _rendererFailCount +
+                    " lần trong 60 giây — DỪNG tự khôi phục để không lặp vô hạn.");
+                SetStatus("❌ Trình duyệt nhúng lỗi lặp nhiều lần. Hãy tắt/bật lại phần mềm; " +
+                          "nếu vẫn lặp: bật 'Chế độ ổn định trình duyệt' trong Cài đặt và cập nhật driver đồ hoạ.");
+                Toast("❌ WebView2 lỗi lặp — cần khởi động lại", true);
+                return;
+            }
+
             if (IsDisposed) return;
             BeginInvoke(new Action(async () =>
             {
@@ -451,28 +746,23 @@ public partial class Form1 : Form
         {
             var lastUrl = SafeSource();
             SetStatus("⚠ Trình duyệt nhúng bị treo — đang tự khôi phục...");
-            AppLogger.Warn("Đang tự khôi phục WebView2. URL gần nhất: " + lastUrl);
+            AppLogger.Warn("Đang tự khôi phục WebView2 (renderer chết lần " + _rendererFailCount +
+                           "). URL gần nhất: " + lastUrl);
 
-            var old = _webView;
-            _webView = null;
-            _coreReady = false;
+            // Control mới + gỡ hết handler của control cũ + dispose (gộp trong 1 hàm,
+            // dùng chung với các lần init retry trong InitializeWebViewAsync).
+            ReplaceWebViewControl();
 
-            if (old != null)
-            {
-                // CoreWebView2 KHÔNG có Dispose() (CS1061) — Dispose control WebView2
-                // là đủ: nó tự huỷ CoreWebView2Controller và giải phóng tiến trình render.
-                try { old.Dispose(); } catch { }
-                try { Controls.Remove(old); } catch { }
-            }
+            // KHÔNG cho init tự navigate về trang chủ — ta sẽ quay về ĐÚNG trang
+            // user đang xem (trước đây init về home xong recovery lại Navigate(lastUrl)
+            // => 2 lần điều hướng chồng nhau, user thấy trang nhảy lung tung).
+            await InitializeWebViewAsync(navigateHome: false);
 
-            _webView = new WebView2 { Dock = DockStyle.Fill };
-            Controls.Add(_webView);
-            Controls.SetChildIndex(_webView, 0);   // Fill phải ở đầu danh sách để không che thanh
-
-            await InitializeWebViewAsync();
-
-            if (!string.IsNullOrEmpty(lastUrl) && lastUrl != _config.DefaultUrl)
-                Navigate(lastUrl!);
+            var target = string.IsNullOrEmpty(lastUrl) || lastUrl == "about:blank"
+                ? HomeUrl()
+                : lastUrl;
+            Navigate(target);
+            _rendererFailCount = 0;   // khôi phục thành công -> đếm lại
 
             SetStatus("✅ Đã khôi phục trình duyệt nhúng.");
             Toast("✅ Đã tự khôi phục trình duyệt nhúng", false);
@@ -503,14 +793,36 @@ public partial class Form1 : Form
         }
     }
 
-    /// <summary>Cửa sổ bật ra từ trang (medinet hay mở popup) -> mở ngay trong cửa sổ này.</summary>
+    /// <summary>
+    /// Cửa sổ bật ra từ trang (medinet hay mở popup) -> mở ngay trong cửa sổ này.
+    ///
+    /// [chống trắng trang 4] Bản cũ Navigate THẲNG frame chính tới e.Uri bất kể giá
+    /// trị: trang gọi window.open() rỗng / window.open('about:blank') (hay gặp ở form
+    /// ASP.NET khi đổi trạng thái) là frame chính bị kéo về about:blank => TRANG
+    /// TRẮNG XOA, bấm ⟳ lại thì hết. Nay chỉ tiếp quản khi URI là link http(s) thật.
+    /// </summary>
     private void Core_NewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
     {
         try
         {
-            e.Handled = true;
-            if (!string.IsNullOrEmpty(e.Uri) && _webView?.CoreWebView2 != null)
-                _webView.CoreWebView2.Navigate(e.Uri);
+            e.Handled = true;   // không để WebView2 mở cửa sổ Chromium riêng (user thấy lạ)
+            var uri = (e.Uri ?? "").Trim();
+            AppLogger.Info("Trang xin mở cửa sổ con: '" + uri + "'");
+
+            if (uri.Length == 0 ||
+                uri.Equals("about:blank", StringComparison.OrdinalIgnoreCase) ||
+                uri.Equals("about:srcdoc", StringComparison.OrdinalIgnoreCase))
+            {
+                // Popup trống — KHÔNG đụng vào trang chính.
+                return;
+            }
+            if (!uri.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                AppLogger.Warn("Bỏ qua yêu cầu mở cửa sổ không phải http(s): " + uri);
+                return;
+            }
+            _webView?.CoreWebView2?.Navigate(uri);
         }
         catch (Exception ex)
         {
@@ -535,6 +847,22 @@ public partial class Form1 : Form
         }
     }
 
+    /// <summary>Nhật ký MỌI điều hướng (kể cả điều hướng nội bộ) — đây là dữ liệu
+    /// quan trọng nhất để tra "lúc được lúc không": log sẽ cho thấy trang bị điều
+    /// hướng đi đâu trước khi trắng.</summary>
+    private void Core_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+    {
+        try
+        {
+            var uri = e.Uri ?? "";
+            AppLogger.Info("Điều hướng bắt đầu: " + uri);
+            // Chặn link javascript: (kéo về trang rỗng nếu không chặn).
+            if (uri.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase))
+                e.Cancel = true;
+        }
+        catch { }
+    }
+
     private async void Core_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         var url = SafeSource() ?? "";
@@ -544,6 +872,43 @@ public partial class Form1 : Form
         {
             SetStatus("❌ Không tải được trang: " + e.WebErrorStatus + " — kiểm tra mạng/VPN.");
             return;
+        }
+
+        // [chống trắng trang 5] Navigation "thành công" nhưng trang trả về TRẮNG
+        // (renderer không render được gì — hay gặp sau crash GPU / tải nửa vời).
+        // Tự Reload tối đa 2 lần/URL rồi dừng và báo rõ, thay vì hiện "✅ Sẵn sàng"
+        // trong khi màn hình trắng (bản cũ user phải tự bấm ⟳, và không biết
+        // phần mềm đang báo "sẵn sàng" là do bug).
+        if (IsHttpUrl(url))
+        {
+            if (await IsPageBlankAsync())
+            {
+                if (_blankReloads.Count > 32) _blankReloads.Clear();
+                var n = _blankReloads.TryGetValue(url, out var c) ? c + 1 : 1;
+                _blankReloads[url] = n;
+                if (n <= 2)
+                {
+                    AppLogger.Warn("Trang trả về TRẮNG dù báo tải xong (lần " + n + "/2) — tự tải lại: " + url);
+                    SetStatus("⚠ Trang trả về trắng — tự tải lại (lần " + n + "/2)...");
+                    try
+                    {
+                        await Task.Delay(1500);  // để Chromium kịp thả renderer rồi mới Reload
+                        if (!_coreReady || _webView?.CoreWebView2 == null) return;
+                        _webView.CoreWebView2.Reload();
+                    }
+                    catch { }
+                    return;  // các bước nạp cấu hình/ngôn ngữ chạy ở lần tải kế tiếp
+                }
+                _blankReloads.Remove(url);
+                AppLogger.Error("Trang VẪN trắng sau 2 lần tự tải lại: " + url);
+                SetStatus("❌ Trang vẫn trắng sau khi tự tải lại. Bấm ⟳ Tải lại (F5), kiểm tra mạng/VPN, " +
+                          "hoặc bật 'Chế độ ổn định trình duyệt' trong Cài đặt.");
+                return;
+            }
+            else
+            {
+                _blankReloads.Remove(url);   // tải lành lặn -> xoá bộ đếm của URL này
+            }
         }
 
         await ApplyConfigToPageAsync();
@@ -597,6 +962,43 @@ public partial class Form1 : Form
         if (st.Forms == 0)
             AppLogger.Warn("Engine trong trang chưa có form nào — cấu hình chưa được nạp.");
         AppLogger.Debug($"Engine state: form={st.Form ?? "(không)"}, fields={st.Fields}, secure={st.SecureContext}, clipboardApi={st.HasClipboardApi}");
+    }
+
+    // ------------------------------------------------- Phát hiện "trang trắng"
+
+    private static bool IsHttpUrl(string url) =>
+        url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Trạng thái document do script phía trang trả về (chống trang trắng).</summary>
+    private sealed class PageState
+    {
+        public string? r { get; set; }
+        public int kids { get; set; }
+        public int len { get; set; }
+    }
+
+    /// <summary>
+    /// True khi trang "đã tải xong" (readyState=complete) mà body TRỐNG — nghĩa là
+    /// renderer đã không render được gì (đúng thứ user nhìn thấy: màn trắng).
+    /// Khi trang đang tải dở thì body rỗng là bình thường, không báo sai.
+    /// </summary>
+    private async Task<bool> IsPageBlankAsync()
+    {
+        if (!_coreReady || _webView?.CoreWebView2 == null) return false;
+        try
+        {
+            var js = "(() => { try { var b = document.body; " +
+                     "var html = document.documentElement && document.documentElement.innerHTML; " +
+                     "return JSON.stringify({ r: document.readyState, kids: b ? b.childElementCount : -1, len: html ? html.length : 0 }); } catch (e) { return null; } })()";
+            var st = await ExecuteJsonAsync<PageState>(js);
+            if (st == null) return false;
+            return st.r == "complete" && st.kids == 0 && st.len < 300;
+        }
+        catch
+        {
+            return false;   // không kiểm tra được thì coi như không trắng (tránh reload vô cớ)
+        }
     }
 
     /// <summary>Chạy script đồng bộ của engine và gỡ JSON kết quả.</summary>
@@ -1333,13 +1735,15 @@ public partial class Form1 : Form
     }
 
     // ------------------------------------------------------------- Điều hướng
-    private void NavigateHome()
+    /// <summary>URL trang chủ (mặc định là trang đăng nhập medinet).</summary>
+    private string HomeUrl()
     {
-        var url = string.IsNullOrWhiteSpace(_config.DefaultUrl)
+        return string.IsNullOrWhiteSpace(_config.DefaultUrl)
             ? "https://quanlyskcd.medinet.org.vn/account/login"
             : _config.DefaultUrl.Trim();
-        Navigate(url);
     }
+
+    private void NavigateHome() => Navigate(HomeUrl());
 
     private void Navigate(string url)
     {
@@ -1353,7 +1757,14 @@ public partial class Form1 : Form
             else
             {
                 // WebView2 chưa sẵn sàng: đặt Source để nó tự điều hướng khi init xong.
-                if (_webView != null) _webView.Source = new Uri(url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url);
+                if (_webView != null)
+                {
+                    _webView.Source = new Uri(url.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? url : "https://" + url);
+                    // Nhớ rằng user đã tự chọn URL — ScheduleInitialNavigation() sẽ
+                    // KHÔNG điều hướng về trang chủ đè lên (trước đây URL user gõ
+                    // trong lúc khởi động có thể bị trang chủ đè mất).
+                    _urlQueuedBeforeCore = true;
+                }
                 _pendingFillAfterLoad = _table != null;
             }
         }

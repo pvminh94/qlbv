@@ -40,6 +40,7 @@ public class SettingsForm : Form
     private readonly CheckBox _chkAllowDevTools = new();
     private readonly CheckBox _chkOpenDevTools = new();
     private readonly CheckBox _chkLogToFile = new();
+    private readonly CheckBox _chkDisableGpu = new();
     private readonly NumericUpDown _numReadyTimeout = new();
     private readonly NumericUpDown _numMaxAttempts = new();
     private readonly NumericUpDown _numMinScore = new();
@@ -297,12 +298,18 @@ public class SettingsForm : Form
         Check(_chkSelectNoHotkey, "Cho phép Ctrl+B chọn 'Không' hàng loạt");
         Check(_chkEnableQueue, "Cho phép điền hàng loạt nhiều dòng (hàng đợi)");
         Check(_chkLogToFile, "Ghi log ra file (nên bật để truy lỗi 'lúc được lúc không')");
+        Check(_chkDisableGpu, "🛡 Chế độ ổn định trình duyệt (không dùng GPU — chống trang trắng)");
         chkLeft.Controls.Add(_chkPreferHeader);
         chkLeft.Controls.Add(_chkNormalizeNumbers);
         chkLeft.Controls.Add(_chkHighlightMissing);
         chkLeft.Controls.Add(_chkSelectNoHotkey);
         chkLeft.Controls.Add(_chkEnableQueue);
         chkLeft.Controls.Add(_chkLogToFile);
+        chkLeft.Controls.Add(_chkDisableGpu);
+        new ToolTip().SetToolTip(_chkDisableGpu,
+            "NÊN BẬT nếu webview hay bị trắng / không hiện trang khi tải (máy driver đồ hoạ cũ, remote desktop).\r\n" +
+            "Khởi Chromium với --disable-gpu: tải trang chậm hơn chút nhưng gần như không bao giờ trắng.\r\n" +
+            "Chỉ TẮT nếu máy đồ hoạ tốt và trang bị giật. Hiệu lực khi khởi động lại phần mềm.");
         leftCol.Controls.Add(chkLeft, 0, 3);
 
         var rightCol = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, AutoSize = true };
@@ -489,6 +496,7 @@ public class SettingsForm : Form
         _chkSelectNoHotkey.Checked = o.EnableSelectNoHotkey;
         _chkEnableQueue.Checked = _config.EnableRowQueue;
         _chkLogToFile.Checked = _config.LogToFile;
+        _chkDisableGpu.Checked = _config.DisableGpu;
         _chkOneClickFill.Checked = _config.OneClickFill;
         _chkOneClickAdvance.Checked = _config.OneClickAdvanceRows;
         _chkFillImmediately.Checked = _config.FillImmediatelyAfterPaste;
@@ -528,6 +536,7 @@ public class SettingsForm : Form
 
         _config.EnableRowQueue = _chkEnableQueue.Checked;
         _config.LogToFile = _chkLogToFile.Checked;
+        _config.DisableGpu = _chkDisableGpu.Checked;
         _config.OneClickFill = _chkOneClickFill.Checked;
         _config.OneClickAdvanceRows = _chkOneClickAdvance.Checked;
         _config.FillImmediatelyAfterPaste = _chkFillImmediately.Checked;

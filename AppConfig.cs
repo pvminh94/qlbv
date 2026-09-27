@@ -178,6 +178,19 @@ public class AppConfig
     /// <summary>Chặn Ctrl+V mặc định của trang để tự điền (CHỈ bật nếu bạn không cần dán chữ vào medinet).</summary>
     public bool HijackPlainCtrlV { get; set; } = false;
 
+    /// <summary>
+    /// CHẾ ĐỘ ỔN ĐỊNH TRÌNH DUYỆT (mặc định BẬT): khởi Chromium với --disable-gpu
+    /// (không dùng card đồ hoạ để ghép hình).
+    ///
+    /// Máy văn phòng có driver đồ hoạ cũ — hoặc chạy qua remote desktop — hay gặp
+    /// tiến trình render của WebView2 chết giữa chừng khiến trang TRẮNG, và "lúc được
+    /// lúc không" theo trạng thái máy. Tắt GPU thì trang tải chậm hơn một chút nhưng
+    /// gần như không bao giờ trắng.
+    ///
+    /// Chỉ TẮT nếu bạn chắc máy đồ hoạ tốt và trang bị giật. Hiệu lực: khởi động lại.
+    /// </summary>
+    public bool DisableGpu { get; set; } = true;
+
     /// <summary>Phím tắt điền dòng đang chọn.</summary>
     public string HotkeyFill { get; set; } = "Ctrl+Enter";
 
