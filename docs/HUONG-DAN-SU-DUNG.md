@@ -111,13 +111,22 @@ danh sách khoa chưa nhập số liệu trong kỳ.
 
 ## 7b. Quản lý tài sản (vai trò `QL_TAI_SAN`; trưởng khoa xem & đề nghị)
 
-Menu **Quản lý tài sản**: Tổng quan · Danh sách · Chứng từ · Khấu hao · In tem · Quét mã · Danh mục.
+Menu **Quản lý tài sản**: Tổng quan · Danh sách · Chứng từ · Kiểm kê · Khấu hao · Lịch bảo trì · Báo cáo · In tem · Quét mã · Danh mục.
 
 1. **Danh mục trước tiên** (*Danh mục tài sản*): kiểm tra cây *Loại tài sản* — mỗi loại mang tiền tố mã (vd `TBYT` → `TBYT.2026.0001`), phương pháp khấu hao, thời gian sử dụng, tỉ lệ hao mòn, chu kỳ kiểm định/bảo dưỡng. Tỉ lệ nạp sẵn chỉ là tham khảo TT23/2023 — **đơn vị quân đội áp dụng theo quy định riêng của BQP, hãy sửa lại cho đúng**. Khai báo thêm *Vị trí*, *Nhà cung cấp/hãng*, *Nguồn vốn*.
 2. **Đưa tài sản vào**: *Danh sách → Thêm tài sản* (chọn loại sẽ tự điền khấu hao/kiểm định; ô *Số lượng tạo* để tạo cả lô, mỗi chiếc một mã) hoặc *Nhập Excel* (tải tệp mẫu → hệ thống kiểm tra toàn bộ, chỉ ghi khi không còn dòng lỗi). Tài sản đã dùng trước đây: nhập *Hao mòn luỹ kế đầu kỳ* + *Ngày chốt số dư*.
 3. **In tem & dán**: chọn tài sản → *In tem* (máy in tem nhiệt 50×30 mm mỗi tem 1 trang, hoặc giấy decal A4 — đặt *Bỏ qua ô đầu* để tận dụng tờ dùng dở). Sửa mẫu tem trong *Quản trị → Thiết kế bản in* (mẫu `TEM_TAI_SAN`). Quét QR trên tem bằng điện thoại sẽ mở ngay hồ sơ tài sản (cần đăng nhập).
 4. **Nghiệp vụ = chứng từ**: cấp phát, điều chuyển, thu hồi, báo hỏng, sửa chữa, bảo dưỡng, kiểm định, đánh giá lại, đề nghị thanh lý, thanh lý, báo mất. Lập → *Gửi duyệt* → người có quyền duyệt bấm *Duyệt & áp dụng* thì tài sản mới đổi khoa/người giữ/trạng thái/hạn kiểm định và ghi vào dòng thời gian. Có thể chọn nhiều tài sản ở *Danh sách* rồi *Lập chứng từ*, hoặc quét mã liên tục trong hộp chọn. Nút **In biên bản** xuất PDF theo mẫu `BIEN_BAN_TAI_SAN` (địa danh, cơ quan cấp trên khai báo ở *Cấu hình hệ thống → Thông tin bệnh viện*).
 5. **Khấu hao / hao mòn**: chọn *Hao mòn năm (TT23)* hoặc *Khấu hao tháng* → nhập kỳ → *Xem trước* (có cảnh báo sót kỳ) → *Chốt kỳ*. Xuất *Sổ theo dõi* Excel ở lịch sử; chỉ huỷ được kỳ mới nhất.
+6. **Kiểm kê điện tử** (*Kiểm kê*):
+   - *Lập đợt kiểm kê*: đặt tên, chọn **phạm vi** (khoa/phòng, vị trí, loại, nhóm — đếm thử số tài sản trước khi lưu), nhập **thành phần hội đồng** và **phân công quét**; bật *Kiểm kê mù* nếu muốn lực lượng độc lập quét mà không thấy sổ sách.
+   - **Bắt đầu** = hệ thống chốt “sổ sách” toàn bộ tài sản thuộc phạm vi. Phạm vi không đổi được nữa (huỷ đợt để lập lại).
+   - **Quét**: vào *Quét mã* trên máy tính có cắm máy quét, hoặc mở trang quét bằng điện thoại rồi bật camera quét QR trên tem. Ngườì quét chỉ cần quét — hệ thống tự đối chiếu: *Khớp · Sai vị trí · Khác tình trạng · Thiếu · Thừa · Chưa có hồ sơ*. Chọn *Tải cho chế độ offline* để quét khi mất mạng: lượt quét lưu trên máy và tự gửi khi có mạng lại (gửi thế nào cũng không bị trùng).
+   - Theo dõi đợt: thanh tiến độ tổng và theo từng khoa, ai quét gì lúc nào. Có thể sửa từng dòng (có/không thấy/vị trí/tình trạng thực tế) hoặc đánh dấu hàng loạt.
+   - **Khoá số liệu & trình duyệt**: phần còn lại không quét được tự tính là “Không tìm thấy” (nếu sót có thể *Mở lại*). Ngườì điều hành lập **chứng từ xử lý chênh lệch** ngay từ đợt kiểm kê: điều chuyển về đúng nơi thực tế, báo hỏng, báo mất (chứng từ vẫn duyệt như bình thường), phần còn lại *Ghi nhận*.
+   - Ngườì có quyền `asset.inventory.approve` **Duyệt kết quả**: tài sản được ghi ngày kiểm kê và (mặc định) cập nhật tình trạng thực tế vào hồ sơ. In **Biên bản kiểm kê** (A4 ngang, mẫu `BIEN_BAN_KIEM_KE` chỉnh được trong Thiết kế bản in; chọn *chỉ phần chênh lệch* để in ngắn) hoặc xuất **Excel** kết quả.
+7. **Lịch bảo trì** (*Lịch bảo trì / kiểm định*): lưới tháng các việc kiểm định/bảo dưỡng/hết bảo hành, cột ngoàn **Quá hạn**, các “lần lặp dự kiến” theo chu kỳ (có thể ẩn). Nút **Tải lịch (.ics)** mở được trong Outlook/Google Calendar. Mỗi sáng 07:30 hệ thống tự gửi thông báo “Nhắc hạn thiết bị” cho phòng Vật tư (toàn viện) và trưởng khoa (khoa mình) — cấu hình trong *Quản trị → Tác vụ định kỳ*.
+8. **Báo cáo tài sản** (*Báo cáo*): 8 báo cáo chuẩn — Sổ TSCĐ (cộng từng loại) · Tăng giảm trong kỳ · Theo khoa/phòng · Chi phí sửa chữa/bảo dưỡng/kiểm định · Thiết bị đến hạn · Hết khấu hao vẫn sử dụng · Ghi giảm (thanh lý, mất) · Kết quả kiểm kê. Chọn thông số → bảng hiện ngay (dòng tổng dính cuối), xuất **Excel** hoặc **In PDF** chuẩn sổ có chữ ký. Trưởng khoa tự xem báo cáo khoa mình.
 6. **Quét mã**: máy quét USB/Bluetooth gõ mã + Enter, hoặc bấm biểu tượng camera (Chrome/Edge/Android).
 7. Hồ sơ tài sản đã phát sinh chứng từ/khấu hao sẽ **khoá** nguyên giá, khoa, người giữ, trạng thái — muốn đổi phải lập chứng từ để đảm bảo sổ sách.
 

@@ -74,6 +74,7 @@
 | 10b | Docker build ổn định (bỏ `# syntax=`, update.sh thử lại 3 lần, gợi ý swap) — người dùng xác nhận VPS cập nhật OK | c63401e |
 | 12 | Dọn workspace, tạo thư mục `.ai/` (STATE.md, dev-setup.sh, examples) | c79caa1 |
 | 13 GĐ1 | **Phân hệ Quản lý tài sản — lõi**: schema+migration 0006, API (danh mục, hồ sơ, chứng từ duyệt, khấu hao TT23/tháng/DB, in tem, biên bản PDF, import/export), 11 trang giao diện `/tai-san/*`, `/ts/<mã>` | (commit này) |
+| 13 GĐ2 | **Kiểm kê điện tử · báo cáo · lịch bảo trì**: migration 0007 (asset_inventories/items/scans), quét camera+máy quét+**offline (idempotent clientId)**, kiểm kê mù, khoá/mở số liệu, xử lý chênh lệch → chứng từ nháp, biên bản PDF `BIEN_BAN_KIEM_KE` + Excel; **8 báo cáo chuẩn** `/asset-reports/:key` (xem, Excel, PDF — dòng nhóm/cộng, `__style` cho renderer); **lịch bảo trì tháng** `/asset-reports/schedule` (lần lặp dự kiến + quá hạn, ICS client-side); tác vụ `NHAC_HAN_TAI_SAN`/handler `asset.due-reminder`; quyền `asset.inventory.*`, `asset.report.view`; trang `/tai-san/kiem-ke*`, `bao-cao`, `bao-tri`; test `.ai/examples/asset-inventory-test.mjs` (57 ca) + `asset-inventory-ui-test.js` | (commit này) |
 
 Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-label].json.gz` v2.
 
@@ -105,3 +106,10 @@ Nguyên văn: "viết tiếp phân hệ quản lý tài sản chuyên nghiệp, 
 - Bẫy: `.env` dev `DB_POOL_MAX=1` → **không dùng `this.db.db` trong `transaction()`**, luôn truyền `tx`; POST trả file cần `@HttpCode(200)`; lỗi Drizzle xem `e.cause`.
 
 - (Đề xuất, chờ người dùng) Script chép bản sao lưu sang NAS/cloud — cần người dùng cho biết đích đến.
+
+**GĐ2 — ghi chú kỹ thuật:**
+- Kiểm kê offline: khoá `(inventoryId, clientId)` ở `asset_inventory_scans`; reconciliation `inventoryResultOf()` trong `asset-inventory.service.ts`. Dòng "thiếu" khi finish được đánh `method=AUTO` để reopen trả về `CHUA_KIEM` nguyên trạng (không đụng dòng đã quét/đã có chứng từ).
+- Resolve: `DIEU_CHUYEN/CAP_PHAT/THIET_B*` tự chọn loại theo hướng (kho→khoa=CAP_PHAT, khoa→kho=THU_HOI, sai vị trí=DIEU_CHUYEN); một dòng chỉ lập 1 chứng từ (`resolutionTxId`).
+- Báo cáo: `ReportResult{columns,rows,summary,chart}`; dòng `_kind: group|subtotal|total`; renderer PDF đọc `row.__style` (đã vá `pdf-renderer.ts` — dòng nhóm in đậm, nền khác, không kẻ ô thụt sai).
+- Lịch bảo trì: `schedule()` chiếu `next_* + interval` tới `to`; sự kiện `projected` (đường đứt). ICS sinh ở client (bảo trì page) — không cần thư viện.
+- Nhắc hạn: dedupe theo `(userId, module=ASSET, entityId=ngày)` để chạy lại không gửi trùng.

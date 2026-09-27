@@ -108,6 +108,11 @@ không có phần nào bị cứng trong mã nguồn.
 | `asset.transaction.approve` | Duyệt, từ chối chứng từ (duyệt mới áp dụng vào tài sản) |
 | `asset.depreciation.view` | Xem khấu hao / hao mòn, xuất sổ theo dõi |
 | `asset.depreciation.run` | Tính, chốt và huỷ kỳ khấu hao / hao mòn |
+| `asset.inventory.view` | Xem đợt kiểm kê (danh sách, tiến độ, kết quả, biên bản, Excel) |
+| `asset.inventory.manage` | Lập & điều hành kiểm kê: chốt sổ sách, khoá số liệu, xử lý chênh lệch, huỷ |
+| `asset.inventory.scan` | Tham gia quét mã / xác nhận trong đợt được phân công hoặc thuộc khoa |
+| `asset.inventory.approve` | Duyệt kết quả kiểm kê (hoàn tất, cập nhật hồ sơ) |
+| `asset.report.view` | Xem báo cáo tài sản chuẩn (sổ TSCĐ, tăng giảm, theo khoa, chi phí, đến hạn, thanh lý, kiểm kê) |
 
 ## 2. Vai trò mặc định
 
@@ -123,7 +128,7 @@ không có phần nào bị cứng trong mã nguồn.
 | `XEM_BAO_CAO` | Xem báo cáo | `DEPT` | Chỉ xem và kết xuất báo cáo, không sửa số liệu |
 | `QL_TAI_SAN` | Quản lý tài sản | `ALL` | Phòng Vật tư – TBYT / Tài chính: toàn bộ quyền `asset.*` (hồ sơ, chứng từ, duyệt, khấu hao, in tem) |
 
-> `TRUONG_KHOA` được thêm `asset.view`, `asset.dashboard`, `asset.transaction.view/create`, `asset.catalog.view`: xem tài sản của khoa, lập đề nghị (báo hỏng, điều chuyển…) để phòng Vật tư duyệt.
+> `TRUONG_KHOA` được thêm: `asset.view`, `asset.dashboard`, `asset.transaction.view/create`, `asset.catalog.view`, `asset.inventory.view/scan`, `asset.report.view` — xem tài sản của khoa, lập đề nghị cho phòng Vật tư duyệt, tham gia quét kiểm kê tại khoa, xem báo cáo trong phạm vi khoa.
 
 > `SUPER_ADMIN` có toàn bộ quyền và bỏ qua mọi kiểm tra (kể cả phạm vi dữ liệu);
 > các vai trò còn lại chỉ có đúng những quyền được gán trong *Quản trị → Vai trò*.

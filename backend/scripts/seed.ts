@@ -19,6 +19,7 @@ import { config } from '../src/config/env';
 import * as schema from '../src/db/schema';
 import { defaultAssetLabelDocument, LABEL_TEMPLATE_CODE } from '../src/modules/assets/asset-label-template';
 import { defaultAssetVoucherDocument, VOUCHER_TEMPLATE_CODE } from '../src/modules/assets/asset-voucher-template';
+import { defaultInventoryDocument, INVENTORY_TEMPLATE_CODE } from '../src/modules/assets/asset-inventory-template';
 import {
   DEMO_DEPARTMENTS,
   DEMO_REPORT_TEMPLATE,
@@ -429,6 +430,32 @@ async function seedAssetVoucherTemplate(): Promise<void> {
   log(`+ Đã tạo mẫu in ${VOUCHER_TEMPLATE_CODE}`);
 }
 
+async function seedAssetInventoryTemplate(): Promise<void> {
+  title('Mẫu biên bản kiểm kê tài sản');
+  const [existing] = await db
+    .select({ id: schema.printTemplates.id })
+    .from(schema.printTemplates)
+    .where(eq(schema.printTemplates.code, INVENTORY_TEMPLATE_CODE))
+    .limit(1);
+  if (existing) {
+    log(`= Mẫu in "${INVENTORY_TEMPLATE_CODE}" đã tồn tại`);
+    return;
+  }
+  await db.insert(schema.printTemplates).values({
+    code: INVENTORY_TEMPLATE_CODE,
+    name: 'Biên bản kiểm kê tài sản (A4 ngang)',
+    description: 'Biên bản kiểm kê: hội đồng, tóm tắt kết quả, bảng sổ sách / kiểm kê / chênh lệch từng tài sản, kết luận. Sửa được trong Trình thiết kế bản in.',
+    module: 'ASSET',
+    docType: INVENTORY_TEMPLATE_CODE,
+    paperSize: 'A4',
+    orientation: 'landscape',
+    document: defaultInventoryDocument() as never,
+    isDefault: true,
+    active: true,
+  });
+  log(`+ Đã tạo mẫu in ${INVENTORY_TEMPLATE_CODE}`);
+}
+
 async function seedReportTemplates(): Promise<void> {
   title('Mẫu báo cáo mẫu');
   const reportableDepts = await db
@@ -557,6 +584,7 @@ async function main(): Promise<void> {
   await seedPrintTemplate();
   await seedAssetLabelTemplate();
   await seedAssetVoucherTemplate();
+  await seedAssetInventoryTemplate();
 
   console.log('\n✅ Hoàn tất khởi tạo dữ liệu nền.\n');
   console.log(`   Đăng nhập: ${config.seed.adminUser} / ${config.seed.adminPass}`);

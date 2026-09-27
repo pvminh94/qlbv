@@ -14,6 +14,8 @@ import { DbService, type Executor, type Tx } from '../../db/db.service';
 import {
   assetCategories,
   assetDepreciationLines,
+  assetInventories,
+  assetInventoryItems,
   assetDepreciationRuns,
   assetEvents,
   assetFundingSources,
@@ -659,7 +661,7 @@ export class AssetsService {
         where ${cond ?? sql`true`}
         group by 1, 2 order by cost desc, count desc limit ${limit}`);
 
-    const [byStatus, byGroup, byDepartment, byCategory, byFunding, byYear, byAge, upcoming, pendingTx, recent] = await Promise.all([
+    const [byStatus, byGroup, byDepartment, byCategory, byFunding, byYear, byAge, upcoming, pendingTx, recent, maintenanceRows, inventoryRows] = await Promise.all([
       groupBy(sql`assets.status`, sql`assets.status`, sql``, where),
       groupBy(sql`coalesce(c.group_code,'KHAC')`, sql`coalesce(c.group_code,'KHAC')`, sql`left join ${assetCategories} c on c.id = assets.category_id`, active),
       groupBy(sql`coalesce(assets.department_id, 0)`, sql`coalesce(d.name, 'Kho / chưa giao')`, sql`left join ${departments} d on d.id = assets.department_id`, active, 30),
@@ -698,10 +700,38 @@ export class AssetsService {
         select e.id, e.asset_id as "assetId", a.code, a.name, e.event_type as "eventType", e.title, e.user_name as "userName", e.created_at as "createdAt"
         from ${assetEvents} e join ${assets} on assets.id = e.asset_id join ${assets} a on a.id = e.asset_id
         where ${where ?? sql`true`} order by e.created_at desc, e.id desc limit 15`),
+      q<{ m: string; cost: number }>(sql`
+        select to_char(t.tx_date, 'YYYY-MM') as m, coalesce(sum(i.amount), 0)::float8 as cost
+        from ${assetTransactionItems} i join ${assetTransactions} t on t.id = i.transaction_id join ${assets} on ${assets}.id = i.asset_id
+        where t.status = 'DA_DUYET' and t.type in ('HOAN_THANH_SUA', 'BAO_DUONG', 'KIEM_DINH') and t.tx_date >= (${today}::date - interval '11 months') and ${where ?? sql`true`}
+        group by 1 order by 1`),
+      this.db.db
+        .select({ id: assetInventories.id, code: assetInventories.code, name: assetInventories.name, status: assetInventories.status })
+        .from(assetInventories)
+        .where(inArray(assetInventories.status, ['DANG_KIEM_KE', 'CHO_DUYET']))
+        .orderBy(desc(assetInventories.id))
+        .limit(5),
     ]);
 
+    const inventoryIds = inventoryRows.map((r) => r.id);
+    const invStats = inventoryIds.length
+      ? await this.db.db
+          .select({
+            inventoryId: assetInventoryItems.inventoryId,
+            expected: sql<number>`count(*) filter (where ${assetInventoryItems.expected})::int`,
+            checked: sql<number>`count(*) filter (where ${assetInventoryItems.expected} and ${assetInventoryItems.checkState} <> 'CHUA_KIEM')::int`,
+            THIEU: sql<number>`count(*) filter (where ${assetInventoryItems.result} = 'THIEU')::int`,
+            THUA: sql<number>`count(*) filter (where ${assetInventoryItems.result} in ('THUA','KHONG_RO'))::int`,
+          })
+          .from(assetInventoryItems)
+          .where(inArray(assetInventoryItems.inventoryId, inventoryIds))
+          .groupBy(assetInventoryItems.inventoryId)
+      : [];
+    const invById = new Map(invStats.map((r) => [r.inventoryId, r]));
     return {
       totals,
+      maintenanceCosts: maintenanceRows.map((r) => ({ month: r.m, cost: r.cost })),
+      activeInventories: inventoryRows.map((r) => ({ ...r, stats: invById.get(r.id) ?? { expected: 0, checked: 0, THIEU: 0, THUA: 0 } })),
       byStatus: byStatus.map((r) => ({ ...r, label: ASSET_STATUS[r.key]?.label ?? r.key, color: ASSET_STATUS[r.key]?.color })),
       byGroup,
       byDepartment,

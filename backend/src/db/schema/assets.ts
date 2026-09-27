@@ -401,3 +401,127 @@ export const assetDepreciationLines = pgTable(
   },
   (t) => [index('asset_depr_lines_run_idx').on(t.runId), index('asset_depr_lines_asset_idx').on(t.assetId)],
 );
+
+/* ------------------------------------------------------------------ Kiểm kê (GĐ2) */
+
+/**
+ * Đợt kiểm kê: Nháp → Đang kiểm kê (đã chụp sổ sách) → Chờ duyệt (đã khoá số liệu đếm)
+ *              → Hoàn tất (ghi nhận ngày kiểm kê vào tài sản) | Huỷ.
+ * Phạm vi: khoa/phòng, vị trí (gồm cây con), loại tài sản, nhóm — để trống = toàn viện.
+ */
+export interface InventoryScope {
+  departmentIds?: number[];
+  locationIds?: number[];
+  categoryIds?: number[];
+  groups?: string[];
+  /** Gồm tài sản đang trong kho (chưa cấp phát cho khoa nào) */
+  includeStore?: boolean;
+}
+export interface InventoryMember {
+  name: string;
+  position?: string;
+  /** Chức trách trong hội đồng: Chủ tịch, Uỷ viên, Thư ký… */
+  role?: string;
+}
+
+export const assetInventories = pgTable(
+  'asset_inventories',
+  {
+    id: serial('id').primaryKey(),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    /** NHAP | DANG_KIEM_KE | CHO_DUYET | HOAN_TAT | DA_HUY */
+    status: text('status').default('NHAP').notNull(),
+    scope: jsonb('scope').$type<InventoryScope>().default({}).notNull(),
+    plannedDate: date('planned_date'),
+    /** Thời điểm chốt sổ sách (ngày kiểm kê trên biên bản) */
+    snapshotAt: timestamp('snapshot_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    decisionNo: text('decision_no').default('').notNull(),
+    committee: jsonb('committee').$type<InventoryMember[]>().default([]).notNull(),
+    /** Tài khoản được phân công quét (ngoài người có quyền quản lý kiểm kê) */
+    memberIds: integer('member_ids').array().default(sql`'{}'::int[]`).notNull(),
+    /** Kiểm kê "mù": người quét không thấy danh sách dự kiến / tình trạng sổ sách */
+    blind: boolean('blind').default(false).notNull(),
+    note: text('note').default('').notNull(),
+    conclusion: text('conclusion').default('').notNull(),
+    createdBy: integer('created_by'),
+    createdByName: text('created_by_name').default('').notNull(),
+    approvedBy: integer('approved_by'),
+    approvedByName: text('approved_by_name').default('').notNull(),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [uniqueIndex('asset_inventories_code_uq').on(t.code), index('asset_inventories_status_idx').on(t.status)],
+);
+
+export const assetInventoryItems = pgTable(
+  'asset_inventory_items',
+  {
+    id: serial('id').primaryKey(),
+    inventoryId: integer('inventory_id')
+      .notNull()
+      .references(() => assetInventories.id, { onDelete: 'cascade' }),
+    /** null = quét được mã không có trong hồ sơ (tài sản thừa chưa có hồ sơ) */
+    assetId: integer('asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    scannedCode: text('scanned_code').default('').notNull(),
+    /** true = có trong sổ sách của phạm vi kiểm kê; false = phát hiện thêm khi quét */
+    expected: boolean('expected').default(true).notNull(),
+    // ---- Sổ sách tại thời điểm chốt
+    bookDepartmentId: integer('book_department_id'),
+    bookLocationId: integer('book_location_id'),
+    bookCustodianName: text('book_custodian_name').default('').notNull(),
+    bookStatus: text('book_status').default('').notNull(),
+    bookCondition: text('book_condition').default('').notNull(),
+    bookCost: money('book_cost').default(0).notNull(),
+    bookValue: money('book_value').default(0).notNull(),
+    // ---- Thực tế
+    /** CHUA_KIEM | CO (thấy) | KHONG_THAY (xác nhận không thấy) */
+    checkState: text('check_state').default('CHUA_KIEM').notNull(),
+    actualDepartmentId: integer('actual_department_id'),
+    actualLocationId: integer('actual_location_id'),
+    actualCondition: text('actual_condition').default('').notNull(),
+    /** KHOP | SAI_VI_TRI | SAI_TINH_TRANG | THIEU | THUA | KHONG_RO | '' (chưa kiểm) */
+    result: text('result').default('').notNull(),
+    scanCount: integer('scan_count').default(0).notNull(),
+    /** CAMERA | SCANNER | MANUAL | OFFLINE */
+    method: text('method').default('').notNull(),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    checkedBy: integer('checked_by'),
+    checkedByName: text('checked_by_name').default('').notNull(),
+    note: text('note').default('').notNull(),
+    /** Xử lý chênh lệch: DIEU_CHUYEN | BAO_MAT | BAO_HONG | GHI_NHAN (chấp nhận, không lập chứng từ) */
+    resolution: text('resolution').default('').notNull(),
+    resolutionTxId: integer('resolution_tx_id'),
+  },
+  (t) => [
+    index('asset_inv_items_inv_idx').on(t.inventoryId, t.result),
+    uniqueIndex('asset_inv_items_asset_uq').on(t.inventoryId, t.assetId).where(sql`asset_id is not null`),
+    index('asset_inv_items_asset_idx').on(t.assetId),
+  ],
+);
+
+/** Nhật ký lượt quét — khoá (inventoryId, clientId) giúp đồng bộ offline không bị trùng */
+export const assetInventoryScans = pgTable(
+  'asset_inventory_scans',
+  {
+    id: serial('id').primaryKey(),
+    inventoryId: integer('inventory_id')
+      .notNull()
+      .references(() => assetInventories.id, { onDelete: 'cascade' }),
+    clientId: text('client_id').notNull(),
+    code: text('code').notNull(),
+    itemId: integer('item_id'),
+    /** FOUND | DUPLICATE | EXTRA | UNKNOWN */
+    outcome: text('outcome').default('').notNull(),
+    method: text('method').default('').notNull(),
+    locationId: integer('location_id'),
+    userId: integer('user_id'),
+    userName: text('user_name').default('').notNull(),
+    deviceId: text('device_id').default('').notNull(),
+    scannedAt: timestamp('scanned_at', { withTimezone: true }).notNull(),
+    createdAt: created(),
+  },
+  (t) => [uniqueIndex('asset_inv_scans_client_uq').on(t.inventoryId, t.clientId), index('asset_inv_scans_inv_idx').on(t.inventoryId, t.scannedAt)],
+);

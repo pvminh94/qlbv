@@ -1,6 +1,6 @@
 # Danh mục API — QLBS
 
-Tổng **161** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, ví dụ `GET /api/hsba/requests`. Cột **Quyền** là (các) mã quyền cần có — nhiều mã cách nhau bởi `|` nghĩa là chỉ cần một trong số đó; quản trị tối cao (`SUPER_ADMIN`) bỏ qua mọi kiểm tra. Xem [PHAN-QUYEN.md](PHAN-QUYEN.md).
+Tổng **187** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, ví dụ `GET /api/hsba/requests`. Cột **Quyền** là (các) mã quyền cần có — nhiều mã cách nhau bởi `|` nghĩa là chỉ cần một trong số đó; quản trị tối cao (`SUPER_ADMIN`) bỏ qua mọi kiểm tra. Xem [PHAN-QUYEN.md](PHAN-QUYEN.md).
 
 > Tài liệu tương tác (Swagger UI): `http://<máy chủ>:4000/api/docs`
 
@@ -254,3 +254,34 @@ Tài nguyên hỗ trợ: `hsba`, `report-entries`, `print-templates`, `users`, `
 | `GET` | `/asset-depreciation/runs/:id/export` | Sổ theo dõi khấu hao/hao mòn (Excel) | `asset.depreciation.view` |
 | `POST` | `/asset-depreciation/runs` | Chốt kỳ `{period, note}` | `asset.depreciation.run` |
 | `POST` | `/asset-depreciation/runs/:id/cancel` | Huỷ kỳ (chỉ kỳ mới nhất của mỗi loại) | `asset.depreciation.run` |
+
+| `GET` | `/asset-inventories/meta` | Nhãn trạng thái, kết quả, cách xử lý kiểm kê | `asset.inventory.view` \| `asset.inventory.scan` |
+| `POST` | `/asset-inventories/scope-preview` | Đếm thử tài sản theo phạm vi `{scope}` | `asset.inventory.manage` |
+| `GET` | `/asset-inventories` | Danh sách đợt kiểm kê: `q, status` (nhiều, cách dấu phẩy) kèm tiến độ `stats` và `counts`; phạm vi nhìn theo khoa | `asset.inventory.view` \| `asset.inventory.scan` |
+| `POST` | `/asset-inventories` | Lập đợt `{name, scope{departmentIds,locationIds,categoryIds,groups,includeStore}, committee[], memberIds, blind, decisionNo, plannedDate, start?}` | `asset.inventory.manage` |
+| `GET` | `/asset-inventories/:id` | Chi tiết: stats, tiến độ theo khoa, ngườ quét, lượt quét gần, `can{…}` | liên quan đợt |
+| `PUT` | `/asset-inventories/:id` | Sửa đợt (phạm vi chỉ sửa khi còn NHAP) | `asset.inventory.manage` |
+| `DELETE` | `/asset-inventories/:id` | Xoá đợt nháp | `asset.inventory.manage` |
+| `POST` | `/asset-inventories/:id/start` | Bắt đầu = chốt sổ sách snapshot theo phạm vi, thông báo phân công | `asset.inventory.manage` |
+| `GET` | `/asset-inventories/:id/items` | Dòng kiểm kê `q,result,checkState,departmentId,expected`; kiểm kê mù chỉ thấy dòng đã quét | liên quan đợt |
+| `PUT` | `/asset-inventories/:id/items/:itemId` | Sửa dòng: trạng thái kiểm, vị trí/tình trạng thực tế, ghi chú | `asset.inventory.scan` \| `asset.inventory.manage` |
+| `DELETE` | `/asset-inventories/:id/items/:itemId` | Xoá dòng thừa quét nhầm | `asset.inventory.scan` \| `asset.inventory.manage` |
+| `POST` | `/asset-inventories/:id/items/bulk` | Đánh dấu hàng loạt `CO/KHONG_THAY/CHUA_KIEM` (dòng sổ) | `asset.inventory.manage` |
+| `POST` | `/asset-inventories/:id/scans` | Aloy quét idempotent theo `clientId` — camera/máy quét/offline; lượt cũ không ghi đè lượt mới | `asset.inventory.scan` \| `asset.inventory.manage` |
+| `GET` | `/asset-inventories/:id/offline-pack` | Gói lấy mẫu offline (sổ rút gọn + danh mục khoa/vị trí) | `asset.inventory.scan` \| `asset.inventory.manage` |
+| `POST` | `/asset-inventories/:id/finish` | Khoá số liệu: chưa kiểm → Thiếu tự động, trình duyệt | `asset.inventory.manage` |
+| `POST` | `/asset-inventories/:id/reopen` | Mở lại (dòng Thiếu tự động quay về chưa kiểm) | `asset.inventory.manage` |
+| `POST` | `/asset-inventories/:id/resolve` | `{action: DIEU_CHUYEN\|BAO_MAT\|BAO_HONG\|GHI_NHAN, itemIds?, submit?}` lập chứng từ nháp/gửi duyệt | `asset.inventory.manage` |
+| `POST` | `/asset-inventories/:id/complete` | Duyệt hoàn tất: ghi `lastInventoryAt`, cập nhật tình trạng hồ sơ, dòng thờ gian | `asset.inventory.approve` |
+| `POST` | `/asset-inventories/:id/cancel` | Huỷ đợt | `asset.inventory.manage` |
+| `GET` | `/asset-inventories/:id/export` | Excel kết quả (2 sheet) | xem được đợt (không mù) |
+| `GET` | `/asset-inventories/:id/print?onlyDiff=` | PDF biên bản kiểm kê (mẫu `BIEN_BAN_KIEM_KE`); `onlyDiff=true` chỉ phần chênh lệch | xem được đợt (không mù) |
+| `GET` | `/asset-reports` | Danh mục 8 báo cáo + tham số mặc định | `asset.report.view` |
+| `GET` | `/asset-reports/:key` | Chạy báo cáo: `so-tai-san` · `tang-giam` · `theo-khoa` · `chi-phi` · `den-han` · `het-khau-hao` · `thanh-ly` · `kiem-ke` → `columns/rows` (gồm `_kind: group\|subtotal\|total`), `summary`, `chart` | `asset.report.view` |
+| `GET` | `/asset-reports/:key/export` | Excel báo cáo | `asset.report.view` |
+| `GET` | `/asset-reports/:key/print` | PDF báo cáo A4 (chữ ký, số trang) | `asset.report.view` |
+| `GET` | `/asset-reports/schedule?from&to&types&departmentId&group` | Lịch KĐ/BD/BH + lần lặp dự kiến (`projected`) + `overdue` | `asset.view` |
+
+> Kiểm kê — kết quả đối chiếu: `KHOP` khớp · `SAI_VI_TRI` sai khoa/vị trí · `SAI_TINH_TRANG` khác tình trạng · `THIEU` thiếu · `THUA` thừa · `KHONG_RO` chưa có hồ sơ. Trạng thái đợt: `NHAP → DANG_KIEM_KE → CHO_DUYET → HOAN_TAT` (+ `DA_HUY`).
+>
+> Tác vụ định kỳ `asset.due-reminder` (mã `NHAC_HAN_TAI_SAN`, 07:30 mỗi ngày): nhắc hạn kiểm định/bảo dưỡng/bảo hành cho ngườ quản lý tài sản (toàn viện) và trưởng khoa (khoa mình), tối đa 1 thông báo/ngườ/ngày; cấu hình `payload.days` (mặc định 15).

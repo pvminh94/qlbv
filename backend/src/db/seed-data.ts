@@ -136,6 +136,11 @@ export const PERMISSIONS: PermissionSeed[] = [
   P('asset.transaction', 'approve', 'Duyệt chứng từ tài sản', 'Duyệt mới áp dụng thay đổi vào tài sản'),
   P('asset.depreciation', 'view', 'Xem khấu hao / hao mòn'),
   P('asset.depreciation', 'run', 'Tính & chốt kỳ khấu hao / hao mòn'),
+  P('asset.inventory', 'view', 'Xem đợt kiểm kê tài sản', 'Danh sách, tiến độ, kết quả, biên bản kiểm kê'),
+  P('asset.inventory', 'manage', 'Lập & điều hành kiểm kê', 'Lập đợt, chốt sổ sách, khoá số liệu, xử lý chênh lệch'),
+  P('asset.inventory', 'scan', 'Tham gia quét kiểm kê', 'Quét mã / xác nhận tài sản trong đợt kiểm kê được phân công hoặc thuộc khoa mình'),
+  P('asset.inventory', 'approve', 'Duyệt kết quả kiểm kê', 'Phê duyệt biên bản, hoàn tất đợt kiểm kê'),
+  P('asset.report', 'view', 'Xem báo cáo tài sản', 'Sổ TSCĐ, tăng giảm, theo khoa, chi phí sửa chữa, lịch bảo trì (theo phạm vi khoa)'),
 
   // Tiện ích
   P('utility', 'view', 'Xem tiện ích'),
@@ -298,6 +303,11 @@ export const ROLES: RoleSeed[] = [
       'asset.transaction.approve',
       'asset.depreciation.view',
       'asset.depreciation.run',
+      'asset.inventory.view',
+      'asset.inventory.manage',
+      'asset.inventory.scan',
+      'asset.inventory.approve',
+      'asset.report.view',
       'print.render.view',
       'print.render.export',
       'utility.view',
@@ -317,6 +327,9 @@ export const ROLES: RoleSeed[] = [
       'asset.transaction.view',
       'asset.transaction.create',
       'asset.catalog.view',
+      'asset.inventory.view',
+      'asset.inventory.scan',
+      'asset.report.view',
       'dashboard.view',
       'dashboard.view-all',
       'hsba.request.view',
@@ -477,6 +490,15 @@ export const UTILITIES = [
 /* ------------------------------------------------------------ Tác vụ định kỳ mẫu */
 
 export const SCHEDULED_JOBS = [
+  {
+    code: 'NHAC_HAN_TAI_SAN',
+    name: 'Nhắc hạn kiểm định / bảo dưỡng / bảo hành tài sản',
+    description: 'Lúc 07:30 mỗi ngày, gửi thông báo cho người quản lý tài sản và trưởng khoa về thiết bị quá hạn hoặc sắp đến hạn (payload.days, mặc định 15 ngày)',
+    handler: 'asset.due-reminder',
+    cron: '30 7 * * *',
+    payload: { days: 15 },
+    active: true,
+  },
   {
     code: 'BACKUP_HANG_NGAY',
     name: 'Sao lưu CSDL hằng ngày',

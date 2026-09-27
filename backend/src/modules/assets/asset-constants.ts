@@ -160,3 +160,32 @@ export const TX_STATUS: Record<string, { label: string; color: string }> = {
   TU_CHOI: { label: 'Từ chối', color: '#dc2626' },
   DA_HUY: { label: 'Đã huỷ', color: '#334155' },
 };
+
+/* ------------------------------------------------------------------ Kiểm kê (GĐ2) */
+export const INVENTORY_STATUS: Record<string, { label: string; color: string }> = {
+  NHAP: { label: 'Nháp', color: '#64748b' },
+  DANG_KIEM_KE: { label: 'Đang kiểm kê', color: '#2563eb' },
+  CHO_DUYET: { label: 'Chờ duyệt', color: '#d97706' },
+  HOAN_TAT: { label: 'Hoàn tất', color: '#16a34a' },
+  DA_HUY: { label: 'Đã huỷ', color: '#334155' },
+};
+
+/** Kết quả đối chiếu từng tài sản */
+export const INVENTORY_RESULT: Record<string, { label: string; color: string; hint: string }> = {
+  KHOP: { label: 'Khớp', color: '#16a34a', hint: 'Có mặt đúng khoa/vị trí, tình trạng như sổ sách' },
+  SAI_VI_TRI: { label: 'Sai vị trí', color: '#2563eb', hint: 'Có mặt nhưng ở khoa/vị trí khác sổ sách' },
+  SAI_TINH_TRANG: { label: 'Khác tình trạng', color: '#d97706', hint: 'Có mặt, tình trạng thực tế khác sổ sách' },
+  THIEU: { label: 'Thiếu', color: '#dc2626', hint: 'Có trong sổ sách nhưng không tìm thấy' },
+  THUA: { label: 'Thừa', color: '#9333ea', hint: 'Tìm thấy nhưng không thuộc phạm vi/sổ sách của đợt kiểm kê' },
+  KHONG_RO: { label: 'Chưa có hồ sơ', color: '#be185d', hint: 'Quét được mã không có trong hồ sơ tài sản' },
+};
+
+export const INVENTORY_RESOLUTION: Record<string, { label: string; txType?: string }> = {
+  DIEU_CHUYEN: { label: 'Lập chứng từ điều chuyển về đúng nơi sử dụng', txType: 'DIEU_CHUYEN' },
+  BAO_MAT: { label: 'Lập chứng từ báo mất', txType: 'BAO_MAT' },
+  BAO_HONG: { label: 'Lập chứng từ báo hỏng', txType: 'BAO_HONG' },
+  GHI_NHAN: { label: 'Ghi nhận, không lập chứng từ' },
+};
+
+/** Tình trạng — thứ tự từ tốt đến xấu (so sánh "xấu đi") */
+export const CONDITION_RANK: Record<string, number> = { TOT: 0, KHA: 1, TRUNG_BINH: 2, KEM: 3, HONG: 4 };

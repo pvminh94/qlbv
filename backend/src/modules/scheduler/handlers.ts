@@ -16,6 +16,7 @@ import type { DbService } from '../../db/db.service';
 import { departments, roles, scheduledJobs, users } from '../../db/schema';
 import type { CacheService } from '../../infra/cache/cache.service';
 import type { JobContext, JobHandler, JobResult } from '../../infra/queue/queue.service';
+import { runAssetDueReminder } from '../assets/asset-reminder';
 import { backupFileName, formatBytes, rotateBackups, writeBackup, type SqlExecutor } from '../backups/backup-writer';
 
 export interface HandlerDeps {
@@ -205,6 +206,13 @@ export function builtinHandlers(deps: HandlerDeps): Map<string, JobHandler> {
       counts,
       removed: olds.map((o) => o.f),
     };
+  });
+
+  /* ------------------------------------------------------------ Tài sản */
+
+  handlers.set('asset.due-reminder', async (ctx?: JobContext): Promise<JobResult> => {
+    const days = Number((ctx?.payload as { days?: unknown } | undefined)?.days ?? 15);
+    return runAssetDueReminder(db, Number.isFinite(days) ? days : 15);
   });
 
   /* ------------------------------------------------------------ Hàng đợi */

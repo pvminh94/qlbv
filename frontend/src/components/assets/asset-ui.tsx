@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Boxes, ClipboardCheck, LayoutDashboard, Printer, ScanLine, Search, Settings2, TrendingDown, X } from 'lucide-react';
+import { BarChart3, Boxes, CalendarClock, ClipboardCheck, ClipboardList, LayoutDashboard, Printer, ScanLine, Search, Settings2, TrendingDown, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -95,7 +95,10 @@ const SUBNAV = [
   { href: '/tai-san', label: 'Tổng quan', icon: LayoutDashboard, perm: ['asset.dashboard', 'asset.view'] },
   { href: '/tai-san/danh-sach', label: 'Danh sách', icon: Boxes, perm: ['asset.view'] },
   { href: '/tai-san/nghiep-vu', label: 'Chứng từ', icon: ClipboardCheck, perm: ['asset.transaction.view'] },
+  { href: '/tai-san/kiem-ke', label: 'Kiểm kê', icon: ClipboardList, perm: ['asset.inventory.view', 'asset.inventory.scan', 'asset.inventory.manage'] },
   { href: '/tai-san/khau-hao', label: 'Khấu hao', icon: TrendingDown, perm: ['asset.depreciation.view'] },
+  { href: '/tai-san/bao-tri', label: 'Lịch bảo trì', icon: CalendarClock, perm: ['asset.view'] },
+  { href: '/tai-san/bao-cao', label: 'Báo cáo', icon: BarChart3, perm: ['asset.report.view'] },
   { href: '/tai-san/in-tem', label: 'In tem', icon: Printer, perm: ['asset.label.print'] },
   { href: '/tai-san/tra-cuu', label: 'Quét mã', icon: ScanLine, perm: ['asset.view'] },
   { href: '/tai-san/danh-muc', label: 'Danh mục', icon: Settings2, perm: ['asset.catalog.view'] },

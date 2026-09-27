@@ -831,7 +831,10 @@ export async function renderPrintDocument(document: PrintDocument, ctx: RenderCo
 
     rows.forEach((row, idx) => {
       const values = columns.map((c) => cellValue(row, c, idx));
-      const h = Math.max(...values.map((v, i) => cellHeight(v, colStyle(columns[i], bodyStyle), colW[i], minRow)));
+      // Kiểu riêng cho từng dòng (dòng nhóm / cộng nhóm trong báo cáo): row.__style
+      const rs = row && typeof row.__style === 'object' ? (row.__style as ElementStyle) : undefined;
+      const rowStyle: ElementStyle = rs ? { ...bodyStyle, ...rs } : bodyStyle;
+      const h = Math.max(...values.map((v, i) => cellHeight(v, colStyle(columns[i], rowStyle), colW[i], minRow)));
       if (cursor + h > bottomLimit() + 0.5) {
         // Sang trang: dùng trang thiết kế kế tiếp nếu còn trống, nếu không thêm trang mới cùng khổ
         pageIdx = pageIdx + 1 < pdfPages.length ? pageIdx + 1 : addPage(geom);
@@ -839,7 +842,7 @@ export async function renderPrintDocument(document: PrintDocument, ctx: RenderCo
         cursor = geom.margins.top * MM;
         if (spec?.repeatHeader !== false) header();
       }
-      placeRow(values, bodyStyle, h, !!spec?.zebra && idx % 2 === 1, false);
+      placeRow(values, rowStyle, h, !!spec?.zebra && idx % 2 === 1 && !rs, false);
     });
 
     if (spec?.totalRow) {
