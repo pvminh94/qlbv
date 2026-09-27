@@ -127,18 +127,51 @@ if [[ $DO_BACKUP -eq 1 ]]; then
   "${DC[@]}" exec -T postgres pg_dump -U qlbs -d qlbs -Fc > "$F" && ok "Đã lưu $F ($(du -h "$F" | cut -f1))"
 fi
 
+# ---------------------------------------------------------------- dựng ảnh
+# Compose mới coi --progress là cờ toàn cục; bản cũ chỉ nhận ở lệnh build
+if "${DC[@]}" --progress plain version >/dev/null 2>&1; then BUILD_CMD=("${DC[@]}" --progress plain build)
+else BUILD_CMD=("${DC[@]}" build --progress=plain); fi
+
+# Lỗi thoáng qua (mạng, BuildKit sập) → thử lại; lỗi code/thiếu RAM → dừng ngay
+TRANSIENT_RE='grpc server closed unexpectedly|frontend grpc|rpc error|connection reset|i/o timeout|TLS handshake timeout|failed to resolve|failed to fetch|temporary failure in name resolution|unexpected EOF|context deadline exceeded|ECONNRESET|ETIMEDOUT|EAI_AGAIN|503 Service Unavailable|toomanyrequests|failed to do request'
+build_service() { # build_service tên log
+  local svc=$1 log=$2 try
+  for try in 1 2 3; do
+    if [[ $try -eq 1 ]]; then printf '  → đang dựng %s ...\n' "$svc"
+    else printf '  ↻ thử lại lần %s (lỗi tạm thời: mạng/BuildKit) ...\n' "$try"; fi
+    if "${BUILD_CMD[@]}" "$svc" >"$log" 2>&1; then return 0; fi
+    grep -qiE "$TRANSIENT_RE" "$log" || return 1
+    cp "$log" "$log.lan$try" 2>/dev/null || true
+    sleep $((try * 5))
+  done
+  return 1
+}
+build_hint() { # gợi ý theo nội dung log lỗi
+  if grep -qiE 'exit code: 137|killed|out of memory|heap out of memory|cannot allocate memory' "$1"; then
+    warn "Có dấu hiệu thiếu RAM khi dựng. Tạo 2GB swap rồi chạy lại:"
+    echo "    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile"
+    echo "    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab"
+  elif grep -qiE "$TRANSIENT_RE" "$1"; then
+    warn "Lỗi mạng/BuildKit lặp lại 3 lần. Thử: sudo systemctl restart docker && sudo bash deploy/update.sh --no-pull"
+  fi
+}
+MEM_FREE_MB=$(awk '/MemAvailable|SwapFree/{s+=$2} END{print int(s/1024)}' /proc/meminfo 2>/dev/null || echo 0)
+if [[ ${#BUILD[@]} -gt 0 && ${MEM_FREE_MB:-0} -gt 0 && ${MEM_FREE_MB:-0} -lt 1500 ]]; then
+  warn "RAM + swap còn trống ~${MEM_FREE_MB}MB — dựng giao diện cần ~1,5GB, nên thêm swap nếu dựng lỗi"
+fi
+
 START=$(date +%s)
 if [[ ${#BUILD[@]} -gt 0 ]]; then
   step "Dựng lại: ${BUILD[*]} (có cache — lần sau nhanh hơn)"
   # Dựng lần lượt (không song song): đỡ tốn RAM trên VPS nhỏ và log lỗi rõ ràng
   for svc in "${BUILD[@]}"; do
-    printf '  → đang dựng %s ...\n' "$svc"
     LOG="/tmp/qlbs-build-$svc.log"
-    if ! "${DC[@]}" build --progress=plain "$svc" >"$LOG" 2>&1; then
+    build_service "$svc" "$LOG" || {
       printf '\n%s✗ Dựng %s thất bại — 40 dòng log cuối:%s\n' "$C_R" "$svc" "$C_0"
       grep -vE 'npm warn deprecated' "$LOG" | tail -40
+      build_hint "$LOG"
       die "Log đầy đủ: $LOG (gửi file này nếu cần hỗ trợ)"
-    fi
+    }
     ok "Đã dựng $svc ($(grep -cE '^#[0-9]+ CACHED' "$LOG" || true) bước dùng cache)"
   done
   step "Khởi động lại: ${BUILD[*]}"

@@ -1,4 +1,7 @@
-# syntax=docker/dockerfile:1
+# Không dùng dòng "# syntax=docker/dockerfile:1": nó bắt BuildKit tải + chạy một container
+# phân tích Dockerfile từ Docker Hub, hay sập ("frontend grpc server closed unexpectedly")
+# khi mạng chập chờn/thiếu RAM. Bộ phân tích tích hợp sẵn (Docker >= 20.10) đã hỗ trợ
+# RUN --mount=type=cache.
 # ---------- Bước 1: cài phụ thuộc ----------
 FROM node:22-alpine AS deps
 WORKDIR /app
