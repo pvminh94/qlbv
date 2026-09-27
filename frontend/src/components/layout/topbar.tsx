@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, LogOut, Menu, Moon, Search, Sun, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
@@ -14,7 +14,12 @@ import type { Notification } from '@/types/api';
 /** Thanh trên cùng: tìm kiếm nhanh, thông báo, đổi giao diện sáng/tối, menu người dùng. */
 export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const router = useRouter();
+  const pathname = usePathname();
   const user = useAuth((s) => s.user);
+  const can = useAuth((s) => s.can);
+  const inAssets = pathname.startsWith('/tai-san');
+  const canAsset = can('asset.view');
+  const canHsba = can('hsba.request.view');
   const logout = useAuth((s) => s.logout);
   const [dark, setDark] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -56,11 +61,41 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
     window.localStorage.setItem('qlbs_theme', next ? 'dark' : 'light');
   };
 
-  const onSearch = (e: React.FormEvent): void => {
+  /**
+   * Tìm kiếm nhanh theo ngữ cảnh:
+   * - Có quyền tài sản và chuỗi khớp đúng mã tài sản / mã vạch / serial (vd quét bằng máy quét) → mở thẳng hồ sơ.
+   * - Đang ở phân hệ tài sản (hoặc không có quyền HSBA) → tìm trong danh sách tài sản.
+   * - Còn lại → tìm phiếu sửa HSBA như trước.
+   */
+  const onSearch = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
-    if (!keyword.trim()) return;
-    router.push(`/ho-so-benh-an?q=${encodeURIComponent(keyword.trim())}`);
+    const kw = keyword.trim();
+    if (!kw) return;
+    if (canAsset && !/\s/.test(kw) && kw.length >= 3) {
+      try {
+        const hit = await apiFetch<{ id: number }>(`/assets/lookup/${encodeURIComponent(kw)}`);
+        if (hit?.id) {
+          setKeyword('');
+          router.push(`/tai-san/${hit.id}`);
+          return;
+        }
+      } catch {
+        /* không phải mã tài sản → tìm theo từ khoá */
+      }
+    }
+    if (canAsset && (inAssets || !canHsba)) {
+      if (pathname === '/tai-san/danh-sach') window.dispatchEvent(new CustomEvent('qlbs:asset-search', { detail: kw }));
+      else router.push(`/tai-san/danh-sach?q=${encodeURIComponent(kw)}&status=`);
+      return;
+    }
+    router.push(`/ho-so-benh-an?q=${encodeURIComponent(kw)}`);
   };
+  const searchHint =
+    canAsset && (inAssets || !canHsba)
+      ? 'Tìm tài sản theo mã, tên, serial… hoặc quét mã vạch/QR'
+      : canAsset
+        ? 'Tìm phiếu sửa HSBA (tên BN, mã KCB, thẻ BHYT) — quét mã tài sản để mở hồ sơ'
+        : 'Tìm phiếu sửa HSBA theo tên bệnh nhân, mã KCB, mã thẻ BHYT…';
 
   const unread = notifications?.unread ?? 0;
 
@@ -70,12 +105,13 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
         <Menu className="size-5" />
       </button>
 
-      <form onSubmit={onSearch} className="relative hidden max-w-md flex-1 md:block">
+      <form onSubmit={(e) => void onSearch(e)} className="relative hidden max-w-md flex-1 md:block">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
         <input
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          placeholder="Tìm phiếu sửa HSBA theo tên bệnh nhân, mã KCB, mã thẻ BHYT…"
+          placeholder={searchHint}
+          title={searchHint}
           className="h-9.5 w-full rounded-lg border bg-[var(--background)] pl-9 pr-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         />
       </form>

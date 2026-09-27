@@ -1,6 +1,6 @@
 # Danh mục API — QLBS
 
-Tổng **126** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, ví dụ `GET /api/hsba/requests`. Cột **Quyền** là (các) mã quyền cần có — nhiều mã cách nhau bởi `|` nghĩa là chỉ cần một trong số đó; quản trị tối cao (`SUPER_ADMIN`) bỏ qua mọi kiểm tra. Xem [PHAN-QUYEN.md](PHAN-QUYEN.md).
+Tổng **161** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, ví dụ `GET /api/hsba/requests`. Cột **Quyền** là (các) mã quyền cần có — nhiều mã cách nhau bởi `|` nghĩa là chỉ cần một trong số đó; quản trị tối cao (`SUPER_ADMIN`) bỏ qua mọi kiểm tra. Xem [PHAN-QUYEN.md](PHAN-QUYEN.md).
 
 > Tài liệu tương tác (Swagger UI): `http://<máy chủ>:4000/api/docs`
 
@@ -214,3 +214,43 @@ Tổng **126** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 | `GET` | `/meta/filters/:resource` | Trường lọc, kiểu dữ liệu, toán tử và nguồn giá trị của một tài nguyên | — |
 
 Tài nguyên hỗ trợ: `hsba`, `report-entries`, `print-templates`, `users`, `roles`, `departments`, `utilities`, `audit`.
+
+## Quản lý tài sản
+
+| Phương thức | Đường dẫn | Mô tả | Quyền |
+|---|---|---|---|
+| `GET` | `/asset-catalogs/meta` | Nhãn liệt kê: phân loại, nhóm, phương pháp khấu hao, loại vị trí, vai trò NCC | `asset.view` \| `asset.catalog.view` |
+| `GET` | `/asset-catalogs/:kind` | Danh mục `categories` \| `locations` \| `suppliers` \| `funding` (cây, kèm `usage`), `?activeOnly=true` | `asset.view` \| `asset.catalog.view` |
+| `POST` | `/asset-catalogs/:kind` | Thêm mục danh mục | `asset.catalog.manage` |
+| `PUT` | `/asset-catalogs/:kind/:id` | Sửa (một phần) mục danh mục | `asset.catalog.manage` |
+| `DELETE` | `/asset-catalogs/:kind/:id` | Xoá mục chưa dùng, không có mục con | `asset.catalog.manage` |
+| `GET` | `/assets` | Danh sách: `q, status (ACTIVE = đang theo dõi, nhiều giá trị cách dấu phẩy), categoryId, locationId (gồm cây con), departmentId (-1 = kho), fundingSourceId, supplierId, custodianId, group, kind, condition, due (calibration\|maintenance\|warranty\|overdue), dueDays, costMin, costMax, acquiredFrom, acquiredTo, ids, sortBy, sortDir` — kèm `summary` tổng nguyên giá/hao mòn/còn lại | `asset.view` |
+| `GET` | `/assets/dashboard` | Tổng quan: KPI, cơ cấu trạng thái/khoa/loại/nhóm/nguồn vốn/năm/tuổi, lịch đến hạn, hoạt động | `asset.dashboard` \| `asset.view` |
+| `GET` | `/assets/options` | Khoa/phòng (theo phạm vi) và người dùng cho ô chọn | `asset.view` |
+| `GET` | `/assets/export` | Xuất Excel theo cùng bộ lọc với danh sách | `asset.export` |
+| `GET` | `/assets/import/template` | Tệp Excel mẫu nhập tài sản | `asset.import` |
+| `POST` | `/assets/import?name=&dryRun=&updateExisting=` | Nhập Excel/CSV (thân = tệp thô octet-stream); `dryRun=true` chỉ kiểm tra; có dòng lỗi thì không ghi | `asset.import` |
+| `GET` | `/assets/lookup/:code` | Tra theo mã tài sản / mã vạch / serial (quét mã, QR `/ts/<mã>`) | `asset.view` |
+| `GET` | `/assets/labels/templates` | Mẫu tem (docType `TEM_TAI_SAN`) | `asset.label.print` |
+| `POST` | `/assets/labels` | In tem PDF: `{ids \| filter, layout: THERMAL\|SHEET, copies, templateId, origin, sheet:{cols,rows,marginTop,marginLeft,gapX,gapY,skip}}`; header `X-Label-Count` | `asset.label.print` |
+| `GET` | `/assets/:id` | Hồ sơ đầy đủ + dòng thời gian, chứng từ, khấu hao đã chốt, lịch dự kiến, thành phần, `locked` | `asset.view` |
+| `POST` | `/assets` | Thêm tài sản; `copies` > 1 tạo cả lô (mỗi chiếc 1 mã) | `asset.create` |
+| `PUT` | `/assets/:id` | Sửa hồ sơ (nguyên giá, khoa, người giữ, trạng thái… bị khoá khi đã phát sinh nghiệp vụ) | `asset.update` |
+| `DELETE` | `/assets/:id` | Xoá (mềm) tài sản chưa phát sinh | `asset.delete` |
+| `GET` | `/asset-transactions/meta` | Loại chứng từ (trạng thái tài sản hợp lệ, nhãn số tiền), trạng thái | `asset.view` \| `asset.transaction.view` |
+| `GET` | `/asset-transactions` | Danh sách: `q, type, status, dateFrom, dateTo, assetId, mine` — kèm `counts.pending/draft` | `asset.transaction.view` |
+| `GET` | `/asset-transactions/:id` | Chi tiết + dòng tài sản (ảnh trước/sau) + quyền thao tác `can` | `asset.transaction.view` |
+| `GET` | `/asset-transactions/:id/print` | In biên bản PDF (mẫu `BIEN_BAN_TAI_SAN`, tiêu đề theo loại nghiệp vụ) | `asset.transaction.view` |
+| `POST` | `/asset-transactions` | Lập chứng từ `{type, txDate, toDepartmentId, toLocationId, toCustodianId, delivererName, receiverName, reason, decisionNo, supplierId, items:[{assetId, amount, condition, note}], submit?, approveNow?}` | `asset.transaction.create` |
+| `PUT` | `/asset-transactions/:id` | Sửa chứng từ Nháp / Từ chối | `asset.transaction.create` |
+| `POST` | `/asset-transactions/:id/submit` | Gửi duyệt (thông báo người duyệt) | `asset.transaction.create` |
+| `POST` | `/asset-transactions/:id/approve` | Duyệt & áp dụng vào tài sản (một giao dịch, khoá dòng) | `asset.transaction.approve` |
+| `POST` | `/asset-transactions/:id/reject` | Từ chối `{reason}` | `asset.transaction.approve` |
+| `POST` | `/asset-transactions/:id/cancel` | Huỷ chứng từ chưa duyệt | `asset.transaction.create` |
+| `GET` | `/asset-depreciation/suggest` | Kỳ gần nhất đã chốt, kỳ gợi ý (năm/tháng) | `asset.depreciation.view` |
+| `GET` | `/asset-depreciation/preview?period=YYYY\|YYYY-MM` | Xem trước kỳ: từng tài sản, theo khoa, cảnh báo sót kỳ | `asset.depreciation.view` |
+| `GET` | `/asset-depreciation/runs` | Lịch sử các kỳ | `asset.depreciation.view` |
+| `GET` | `/asset-depreciation/runs/:id` | Chi tiết kỳ | `asset.depreciation.view` |
+| `GET` | `/asset-depreciation/runs/:id/export` | Sổ theo dõi khấu hao/hao mòn (Excel) | `asset.depreciation.view` |
+| `POST` | `/asset-depreciation/runs` | Chốt kỳ `{period, note}` | `asset.depreciation.run` |
+| `POST` | `/asset-depreciation/runs/:id/cancel` | Huỷ kỳ (chỉ kỳ mới nhất của mỗi loại) | `asset.depreciation.run` |

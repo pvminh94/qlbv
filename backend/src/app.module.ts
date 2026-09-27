@@ -29,6 +29,7 @@ import { HsbaModule } from './modules/hsba/hsba.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AssetsModule } from './modules/assets/assets.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UtilitiesModule } from './modules/utilities/utilities.module';
 import { BackupsModule } from './modules/backups/backups.module';
@@ -70,6 +71,7 @@ const envFile = [
     ReportsModule,
     NotificationsModule,
     DashboardModule,
+    AssetsModule,
     // Kiểm tra tình trạng
     HealthModule,
   ],

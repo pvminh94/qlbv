@@ -296,3 +296,19 @@ export function suggestUsername(fullName: string, taken: Set<string>): string {
   for (let i = 2; taken.has(name); i++) name = `${base}${i}`;
   return name;
 }
+
+/**
+ * Đọc tệp .xlsx / .csv / .txt thành lưới ô (dùng chung cho các chức năng nhập khác, vd tài sản).
+ * Tự nhận bảng mã (UTF-8/UTF-16/Windows-1258…) và dấu phân cách.
+ */
+export async function readTabularGrid(buf: Buffer, fileName: string): Promise<string[][]> {
+  const lower = fileName.toLowerCase();
+  const isZip = buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x4b;
+  if (lower.endsWith('.xls') && !isZip) {
+    throw new BadRequestException('Tệp .xls (Excel 97-2003) chưa được hỗ trợ — hãy "Lưu thành" .xlsx hoặc CSV UTF-8 rồi nhập lại.');
+  }
+  if (isZip || lower.endsWith('.xlsx')) return (await readXlsx(buf)).grid;
+  if (!/\.(csv|txt|tsv)$/.test(lower)) throw new BadRequestException('Chỉ nhận tệp .xlsx, .csv hoặc .txt');
+  const { text } = decodeText(buf);
+  return parseCsv(text, detectDelimiter(text)).map((r) => r.map((c) => c.trim()));
+}

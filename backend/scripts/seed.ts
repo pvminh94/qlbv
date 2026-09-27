@@ -17,6 +17,8 @@ import { Pool } from 'pg';
 
 import { config } from '../src/config/env';
 import * as schema from '../src/db/schema';
+import { defaultAssetLabelDocument, LABEL_TEMPLATE_CODE } from '../src/modules/assets/asset-label-template';
+import { defaultAssetVoucherDocument, VOUCHER_TEMPLATE_CODE } from '../src/modules/assets/asset-voucher-template';
 import {
   DEMO_DEPARTMENTS,
   DEMO_REPORT_TEMPLATE,
@@ -375,6 +377,58 @@ async function seedPrintTemplate(): Promise<void> {
   log('+ Đã tạo mẫu in PHIEU_SUA_HSBA (A4 dọc, 3 khối chữ ký)');
 }
 
+async function seedAssetLabelTemplate(): Promise<void> {
+  title('Mẫu tem tài sản');
+  const [existing] = await db
+    .select({ id: schema.printTemplates.id })
+    .from(schema.printTemplates)
+    .where(eq(schema.printTemplates.code, LABEL_TEMPLATE_CODE))
+    .limit(1);
+  if (existing) {
+    log(`= Mẫu in "${LABEL_TEMPLATE_CODE}" đã tồn tại`);
+    return;
+  }
+  await db.insert(schema.printTemplates).values({
+    code: LABEL_TEMPLATE_CODE,
+    name: 'Tem tài sản 50 × 30 mm (QR + mã vạch)',
+    description: 'Tem dán tài sản: QR tra cứu, mã vạch Code128, tên, khoa, năm sử dụng. Sửa được trong Trình thiết kế bản in.',
+    module: 'ASSET',
+    docType: LABEL_TEMPLATE_CODE,
+    paperSize: 'Custom',
+    orientation: 'portrait',
+    document: defaultAssetLabelDocument() as never,
+    isDefault: true,
+    active: true,
+  });
+  log(`+ Đã tạo mẫu in ${LABEL_TEMPLATE_CODE} (50 × 30 mm)`);
+}
+
+async function seedAssetVoucherTemplate(): Promise<void> {
+  title('Mẫu biên bản chứng từ tài sản');
+  const [existing] = await db
+    .select({ id: schema.printTemplates.id })
+    .from(schema.printTemplates)
+    .where(eq(schema.printTemplates.code, VOUCHER_TEMPLATE_CODE))
+    .limit(1);
+  if (existing) {
+    log(`= Mẫu in "${VOUCHER_TEMPLATE_CODE}" đã tồn tại`);
+    return;
+  }
+  await db.insert(schema.printTemplates).values({
+    code: VOUCHER_TEMPLATE_CODE,
+    name: 'Biên bản chứng từ tài sản (A4)',
+    description: 'Biên bản bàn giao / điều chuyển / thu hồi / sửa chữa / thanh lý… — tiêu đề tự đổi theo loại nghiệp vụ. Sửa được trong Trình thiết kế bản in.',
+    module: 'ASSET',
+    docType: VOUCHER_TEMPLATE_CODE,
+    paperSize: 'A4',
+    orientation: 'portrait',
+    document: defaultAssetVoucherDocument() as never,
+    isDefault: true,
+    active: true,
+  });
+  log(`+ Đã tạo mẫu in ${VOUCHER_TEMPLATE_CODE}`);
+}
+
 async function seedReportTemplates(): Promise<void> {
   title('Mẫu báo cáo mẫu');
   const reportableDepts = await db
@@ -501,6 +555,8 @@ async function main(): Promise<void> {
   await seedUtilities();
   await seedJobs();
   await seedPrintTemplate();
+  await seedAssetLabelTemplate();
+  await seedAssetVoucherTemplate();
 
   console.log('\n✅ Hoàn tất khởi tạo dữ liệu nền.\n');
   console.log(`   Đăng nhập: ${config.seed.adminUser} / ${config.seed.adminPass}`);

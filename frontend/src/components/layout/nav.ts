@@ -18,6 +18,12 @@ import {
   DatabaseBackup,
   FolderTree,
   BadgeCheck,
+  Boxes,
+  ArrowLeftRight,
+  TrendingDown,
+  QrCode,
+  ScanLine,
+  PackageSearch,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -66,6 +72,18 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/bao-cao', label: 'Xem báo cáo', icon: BarChart3, permission: 'report.view.view' },
       { href: '/bao-cao/tong-hop', label: 'Tổng hợp toàn viện', icon: Activity, permission: 'report.summary.view' },
       { href: '/bao-cao/mau', label: 'Mẫu báo cáo', icon: FileText, permission: 'report.template.view' },
+    ],
+  },
+  {
+    label: 'Quản lý tài sản',
+    items: [
+      { href: '/tai-san', label: 'Tổng quan tài sản', icon: Boxes, permission: 'asset.view' },
+      { href: '/tai-san/danh-sach', label: 'Danh sách tài sản', icon: PackageSearch, permission: 'asset.view' },
+      { href: '/tai-san/nghiep-vu', label: 'Chứng từ nghiệp vụ', icon: ArrowLeftRight, permission: 'asset.transaction.view' },
+      { href: '/tai-san/khau-hao', label: 'Khấu hao / hao mòn', icon: TrendingDown, permission: 'asset.depreciation.view' },
+      { href: '/tai-san/in-tem', label: 'In tem QR / mã vạch', icon: QrCode, permission: 'asset.label.print' },
+      { href: '/tai-san/tra-cuu', label: 'Quét mã', icon: ScanLine, permission: 'asset.view' },
+      { href: '/tai-san/danh-muc', label: 'Danh mục tài sản', icon: FolderTree, permission: 'asset.catalog.view' },
     ],
   },
   {

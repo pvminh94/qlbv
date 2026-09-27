@@ -40,8 +40,8 @@ interface PrintTemplateDetail extends PrintTemplateRow {
   pageMargins?: Record<string, number>;
 }
 
-const MODULES = ['HSBA', 'REPORT', 'UTILITY', 'GENERIC'];
-const DOC_TYPES = ['PHIEU_SUA_HSBA', 'BAO_CAO_KHOA', 'BAO_CAO_TONG_HOP', 'GENERIC'];
+const MODULES = ['HSBA', 'REPORT', 'ASSET', 'UTILITY', 'GENERIC'];
+const DOC_TYPES = ['PHIEU_SUA_HSBA', 'BAO_CAO_KHOA', 'BAO_CAO_TONG_HOP', 'TEM_TAI_SAN', 'GENERIC'];
 
 interface TemplateForm {
   code: string;

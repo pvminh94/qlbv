@@ -25,7 +25,7 @@ export interface PrintTemplateInput {
   code: string;
   name: string;
   description?: string;
-  module?: 'HSBA' | 'REPORT' | 'UTILITY' | 'GENERIC';
+  module?: 'HSBA' | 'REPORT' | 'ASSET' | 'UTILITY' | 'GENERIC';
   docType?: string;
   paperSize?: string;
   orientation?: 'portrait' | 'landscape';

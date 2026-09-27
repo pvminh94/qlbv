@@ -109,6 +109,18 @@ danh sách khoa chưa nhập số liệu trong kỳ.
 - Tài khoản mới dùng mật khẩu `Qlbs@123456`, bắt buộc đổi khi đăng nhập lần đầu. Chọn “Ghi đè” để cập nhật tài khoản đã có (không đổi mật khẩu, ô trống không xoá dữ liệu cũ).
 - Tệp CSV/TXT: UTF-8, UTF-16 (Excel “Unicode Text”) hoặc Windows-1258; phân cách bằng `,` `;` Tab hoặc `|`. Tệp `.xls` cũ cần lưu lại thành `.xlsx`. Tối đa 5000 dòng / 10 MB mỗi lần.
 
+## 7b. Quản lý tài sản (vai trò `QL_TAI_SAN`; trưởng khoa xem & đề nghị)
+
+Menu **Quản lý tài sản**: Tổng quan · Danh sách · Chứng từ · Khấu hao · In tem · Quét mã · Danh mục.
+
+1. **Danh mục trước tiên** (*Danh mục tài sản*): kiểm tra cây *Loại tài sản* — mỗi loại mang tiền tố mã (vd `TBYT` → `TBYT.2026.0001`), phương pháp khấu hao, thời gian sử dụng, tỉ lệ hao mòn, chu kỳ kiểm định/bảo dưỡng. Tỉ lệ nạp sẵn chỉ là tham khảo TT23/2023 — **đơn vị quân đội áp dụng theo quy định riêng của BQP, hãy sửa lại cho đúng**. Khai báo thêm *Vị trí*, *Nhà cung cấp/hãng*, *Nguồn vốn*.
+2. **Đưa tài sản vào**: *Danh sách → Thêm tài sản* (chọn loại sẽ tự điền khấu hao/kiểm định; ô *Số lượng tạo* để tạo cả lô, mỗi chiếc một mã) hoặc *Nhập Excel* (tải tệp mẫu → hệ thống kiểm tra toàn bộ, chỉ ghi khi không còn dòng lỗi). Tài sản đã dùng trước đây: nhập *Hao mòn luỹ kế đầu kỳ* + *Ngày chốt số dư*.
+3. **In tem & dán**: chọn tài sản → *In tem* (máy in tem nhiệt 50×30 mm mỗi tem 1 trang, hoặc giấy decal A4 — đặt *Bỏ qua ô đầu* để tận dụng tờ dùng dở). Sửa mẫu tem trong *Quản trị → Thiết kế bản in* (mẫu `TEM_TAI_SAN`). Quét QR trên tem bằng điện thoại sẽ mở ngay hồ sơ tài sản (cần đăng nhập).
+4. **Nghiệp vụ = chứng từ**: cấp phát, điều chuyển, thu hồi, báo hỏng, sửa chữa, bảo dưỡng, kiểm định, đánh giá lại, đề nghị thanh lý, thanh lý, báo mất. Lập → *Gửi duyệt* → người có quyền duyệt bấm *Duyệt & áp dụng* thì tài sản mới đổi khoa/người giữ/trạng thái/hạn kiểm định và ghi vào dòng thời gian. Có thể chọn nhiều tài sản ở *Danh sách* rồi *Lập chứng từ*, hoặc quét mã liên tục trong hộp chọn. Nút **In biên bản** xuất PDF theo mẫu `BIEN_BAN_TAI_SAN` (địa danh, cơ quan cấp trên khai báo ở *Cấu hình hệ thống → Thông tin bệnh viện*).
+5. **Khấu hao / hao mòn**: chọn *Hao mòn năm (TT23)* hoặc *Khấu hao tháng* → nhập kỳ → *Xem trước* (có cảnh báo sót kỳ) → *Chốt kỳ*. Xuất *Sổ theo dõi* Excel ở lịch sử; chỉ huỷ được kỳ mới nhất.
+6. **Quét mã**: máy quét USB/Bluetooth gõ mã + Enter, hoặc bấm biểu tượng camera (Chrome/Edge/Android).
+7. Hồ sơ tài sản đã phát sinh chứng từ/khấu hao sẽ **khoá** nguyên giá, khoa, người giữ, trạng thái — muốn đổi phải lập chứng từ để đảm bảo sổ sách.
+
 ## 8. Câu hỏi thường gặp
 
 **Tôi không thấy menu nào?** Menu được cấp theo quyền — liên hệ quản trị để được gán

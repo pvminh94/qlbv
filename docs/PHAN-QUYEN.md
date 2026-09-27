@@ -4,7 +4,7 @@ Hệ thống dùng **PBAC**: mỗi endpoint yêu cầu mã quyền cụ thể, v
 Tất cả quyền, vai trò và phạm vi dữ liệu đều sửa được trong *Quản trị → Vai trò* (và gán lại cho người dùng),
 không có phần nào bị cứng trong mã nguồn.
 
-## 1. Danh mục quyền (80 quyền)
+## 1. Danh mục quyền (100 quyền)
 
 | Mã quyền | Ý nghĩa |
 |---|---|
@@ -92,6 +92,22 @@ không có phần nào bị cứng trong mã nguồn.
 | `backup.restore` | Phục hồi từ bản sao lưu |
 | `file.upload` | Tải tệp lên |
 | `file.delete` | Xoá tệp đã tải lên |
+| `asset.view` | Xem tài sản (danh sách, hồ sơ, dòng thời gian — theo phạm vi khoa) |
+| `asset.view-all` | Xem tài sản toàn viện (bỏ qua giới hạn khoa) |
+| `asset.create` | Thêm tài sản (kể cả thêm cả lô nhiều chiếc) |
+| `asset.update` | Sửa hồ sơ tài sản (trường nhạy cảm bị khoá sau khi phát sinh nghiệp vụ) |
+| `asset.delete` | Xoá tài sản chưa phát sinh chứng từ đã duyệt / chưa chốt khấu hao |
+| `asset.import` | Nhập tài sản từ Excel/CSV |
+| `asset.export` | Xuất danh sách tài sản ra Excel |
+| `asset.dashboard` | Xem tổng quan tài sản |
+| `asset.label.print` | In tem QR / mã vạch |
+| `asset.catalog.view` | Xem danh mục loại tài sản, vị trí, nhà cung cấp, nguồn vốn |
+| `asset.catalog.manage` | Quản lý các danh mục trên |
+| `asset.transaction.view` | Xem chứng từ nghiệp vụ tài sản, in biên bản |
+| `asset.transaction.create` | Lập / sửa / gửi duyệt / huỷ chứng từ của mình |
+| `asset.transaction.approve` | Duyệt, từ chối chứng từ (duyệt mới áp dụng vào tài sản) |
+| `asset.depreciation.view` | Xem khấu hao / hao mòn, xuất sổ theo dõi |
+| `asset.depreciation.run` | Tính, chốt và huỷ kỳ khấu hao / hao mòn |
 
 ## 2. Vai trò mặc định
 
@@ -105,6 +121,9 @@ không có phần nào bị cứng trong mã nguồn.
 | `TRUONG_KHOA` | Trưởng khoa | `DEPT` | Nhập và chịu trách nhiệm số liệu báo cáo của khoa mình |
 | `NHAP_BAO_CAO` | Nhập báo cáo khoa | `DEPT` | Chỉ nhập số liệu báo cáo công tác của khoa được gán |
 | `XEM_BAO_CAO` | Xem báo cáo | `DEPT` | Chỉ xem và kết xuất báo cáo, không sửa số liệu |
+| `QL_TAI_SAN` | Quản lý tài sản | `ALL` | Phòng Vật tư – TBYT / Tài chính: toàn bộ quyền `asset.*` (hồ sơ, chứng từ, duyệt, khấu hao, in tem) |
+
+> `TRUONG_KHOA` được thêm `asset.view`, `asset.dashboard`, `asset.transaction.view/create`, `asset.catalog.view`: xem tài sản của khoa, lập đề nghị (báo hỏng, điều chuyển…) để phòng Vật tư duyệt.
 
 > `SUPER_ADMIN` có toàn bộ quyền và bỏ qua mọi kiểm tra (kể cả phạm vi dữ liệu);
 > các vai trò còn lại chỉ có đúng những quyền được gán trong *Quản trị → Vai trò*.
@@ -116,6 +135,8 @@ không có phần nào bị cứng trong mã nguồn.
 | `ALL` | Toàn bộ dữ liệu của bệnh viện |
 | `DEPT` | Dữ liệu của (các) khoa được gán cho tài khoản |
 | `OWN` | Chỉ phiếu/bản ghi do mình tạo hoặc mình là người đề nghị |
+
+**Tài sản:** không có `asset.view-all` thì chỉ thấy tài sản thuộc các khoa được gán cho tài khoản, hoặc tài sản mình đang giữ (người giữ). Chứng từ: thấy chứng từ mình lập hoặc có khoa đi/đến trong phạm vi.
 
 Quyền `*.view-all` cho phép xem toàn viện dù vai trò có phạm vi hẹp hơn (ví dụ `hsba.request.view-all`, `report.view.all-departments`).
 

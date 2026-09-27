@@ -8,3 +8,4 @@ export * from './hsba';
 export * from './reports';
 export * from './printing';
 export * from './ops';
+export * from './assets';

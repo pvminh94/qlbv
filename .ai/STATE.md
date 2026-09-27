@@ -72,6 +72,8 @@
 | 9 | Danh mục Chức danh (`/job-titles`, quyền `job_title.*`), menu Danh mục; import nhân viên Excel/CSV/TXT (`/users/import/file`, mẫu `/users/import/template`, ≤10MB/5000 dòng, MK mặc định `Qlbs@123456`); email/SĐT/ghi chú không bắt buộc | f6db7cc |
 | 10 | **Bản in mặc định Times New Roman** (kể cả xem trước PDF) + **trình thiết kế bản in toàn màn hình** kiểu phần mềm thương mại | 8b4fba3 |
 | 10b | Docker build ổn định (bỏ `# syntax=`, update.sh thử lại 3 lần, gợi ý swap) — người dùng xác nhận VPS cập nhật OK | c63401e |
+| 12 | Dọn workspace, tạo thư mục `.ai/` (STATE.md, dev-setup.sh, examples) | c79caa1 |
+| 13 GĐ1 | **Phân hệ Quản lý tài sản — lõi**: schema+migration 0006, API (danh mục, hồ sơ, chứng từ duyệt, khấu hao TT23/tháng/DB, in tem, biên bản PDF, import/export), 11 trang giao diện `/tai-san/*`, `/ts/<mã>` | (commit này) |
 
 Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-label].json.gz` v2.
 
@@ -87,5 +89,19 @@ Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-lab
 
 ## 6. Việc đang mở / đề xuất
 
+### Yêu cầu 13 (đang làm): Phân hệ QUẢN LÝ TÀI SẢN + báo cáo/dashboard + realtime + làm lại RBAC
+Nguyên văn: "viết tiếp phân hệ quản lý tài sản chuyên nghiệp, chi tiết, chuyên sâu, barcode, kiểm kê, in tem… tích hợp đồng bộ, logic với tính năng hiện tại, thêm phần quản lý tạo, edit report, dashboard cho từng phân hệ… cực đẹp chuyên nghiệp, đồng bộ thời gian thực…, cải tiến user, role, permission dễ nhìn, logic, chuyên sâu".
+
+**Quyết định của người dùng (ask_user):**
+- Thứ tự: GĐ1 lõi tài sản (✅ xong) → **GĐ2 kiểm kê (quét camera offline rồi đồng bộ + máy quét), bảo trì/sửa chữa kế hoạch, báo cáo tài sản** → GĐ3 trình tạo báo cáo + dashboard mọi phân hệ + realtime → GĐ4 làm lại User/Role/Permission. Mỗi GĐ = 1 lần push, test kỹ.
+- Khấu hao: cả hao mòn năm TT23, đường thẳng tháng, số dư giảm dần — cấu hình theo loại/từng tài sản.
+- In tem: máy in nhiệt + decal A4. Quét: camera + máy quét USB/BT. Phạm vi: mọi loại tài sản (TBYT: rủi ro A–D, số lưu hành, kiểm định/bảo dưỡng).
+
+**GĐ1 đã làm (tham chiếu):**
+- Backend `backend/src/modules/assets/`: `assets.service` (phạm vi khoa: `asset.view-all` hoặc departmentIds hoặc custodian=mình; trường CONTROLLED bị khoá khi `hasHistory`), `asset-transactions.service` (NHAP→CHO_DUYET→DA_DUYET/TU_CHOI/DA_HUY, duyệt khoá dòng FOR UPDATE), `asset-depreciation.service` + `depreciation.ts` (đã kiểm chứng số liệu), `asset-labels.service` (THERMAL/SHEET, đổi tiền tố binding `rN.`), `asset-voucher.service` + `asset-voucher-template.ts` (biên bản `BIEN_BAN_TAI_SAN`), `asset-io.service` (import dry-run/export), `asset-catalogs.service`.
+- Mẫu in seed: `TEM_TAI_SAN`, `BIEN_BAN_TAI_SAN` (module `ASSET`). Cấu hình mới: `hospital.parentName`, `hospital.place`.
+- Frontend: `lib/assets.ts`, `components/assets/{asset-ui,asset-form,asset-import}.tsx`, trang `app/(app)/tai-san/{page,danh-sach,[id],nghiep-vu,nghiep-vu/tao-moi,nghiep-vu/[id],khau-hao,in-tem,tra-cuu,danh-muc}`, `app/(app)/ts/[code]`. Màu nhấn teal-600. Menu nhóm "Quản lý tài sản".
+- Test: `node .ai/examples/asset-api-test.mjs` (48 ca) và `node .ai/examples/asset-ui-test.js` (Playwright, ảnh `/tmp/shots/a*.png`).
+- Bẫy: `.env` dev `DB_POOL_MAX=1` → **không dùng `this.db.db` trong `transaction()`**, luôn truyền `tx`; POST trả file cần `@HttpCode(200)`; lỗi Drizzle xem `e.cause`.
+
 - (Đề xuất, chờ người dùng) Script chép bản sao lưu sang NAS/cloud — cần người dùng cho biết đích đến.
-- Chưa có yêu cầu mới sau #10b.

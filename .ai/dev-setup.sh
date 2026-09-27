@@ -34,6 +34,11 @@ if [[ "${1:-}" == "--demo" ]]; then
   exit 0
 fi
 
+# Sau reset: bit +x và git identity bị mất (.git/config không được lưu)
+chmod +x "$REPO"/deploy/*.sh "$REPO"/.ai/dev-setup.sh 2>/dev/null
+git -C "$REPO" config user.name "QLBS Bot"; git -C "$REPO" config user.email bot@qlbs.local
+git -C "$REPO" remote get-url origin >/dev/null 2>&1 || git -C "$REPO" remote add origin https://github.com/pvminh94/qlbv.git
+
 say "Gói hệ thống (postgresql, redis, poppler, cabextract)"
 NEED=()
 command -v pg_isready >/dev/null || NEED+=(postgresql)

@@ -159,6 +159,8 @@ export function defaultSettings(): SettingItem[] {
     { key: 'hospital.website', value: '', group: 'hospital', label: 'Website', isPublic: true },
     { key: 'hospital.logo', value: '', group: 'hospital', label: 'Logo (đường dẫn)', isPublic: true },
     { key: 'hospital.director', value: '', group: 'hospital', label: 'Giám đốc bệnh viện', isPublic: true },
+    { key: 'hospital.parentName', value: '', group: 'hospital', label: 'Cơ quan cấp trên (dòng trên tên đơn vị ở biên bản)', isPublic: true },
+    { key: 'hospital.place', value: '', group: 'hospital', label: 'Địa danh ghi trên văn bản (vd: TP. Hồ Chí Minh)', isPublic: true },
 
     // Quy tắc HSBA
     { key: 'hsba.codePrefix', value: 'SDS', group: 'hsba', label: 'Tiền tố mã phiếu sửa HSBA', isPublic: true },

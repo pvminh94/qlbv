@@ -43,6 +43,7 @@ const MODULES = [
   'SYSTEM',
   'HSBA',
   'REPORT',
+  'ASSET',
   'PRINT',
   'UTILITY',
   'FILE',
