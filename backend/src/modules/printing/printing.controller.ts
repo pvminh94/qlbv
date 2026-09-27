@@ -10,15 +10,25 @@ import {
   Post,
   Put,
   Query,
+  Req,
   Res,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { Audit, CurrentUser, RequirePermissions } from '../../common/decorators';
 import { AdvancedQueryDto } from '../../common/dto/query.dto';
 import type { AccessContext } from '../../common/types/access-context';
 import type { PrintDocument } from '../../db/schema/printing';
 import { PrintingService } from './printing.service';
+import {
+  DEFAULT_FONT_FAMILY,
+  FONT_VARIANTS,
+  deleteCustomFont,
+  fontRegistry,
+  saveCustomFont,
+  type FontVariant,
+} from '../../infra/rendering/font-registry';
 
 interface RenderBody {
   data?: Record<string, unknown>;
@@ -111,6 +121,67 @@ export class PrintingController {
   @ApiOperation({ summary: 'Xoá mẫu in' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
+  }
+
+  /* ------------------------------------------------------------ Font chữ */
+
+  @Get('fonts')
+  @RequirePermissions('print.template.view')
+  @ApiOperation({ summary: 'Danh sách font dùng cho bản in (mặc định Times New Roman)' })
+  fonts() {
+    return { default: DEFAULT_FONT_FAMILY, families: fontRegistry.families() };
+  }
+
+  /** Tệp font đúng như PDF sẽ nhúng — trình thiết kế nạp vào để hiển thị giống hệt bản in */
+  @Get('fonts/file')
+  @RequirePermissions('print.template.view')
+  @ApiOperation({ summary: 'Tải tệp font (family, variant=regular|bold|italic|boldItalic)' })
+  fontFile(
+    @Query('family') family: string,
+    @Query('variant') variant: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const v = (FONT_VARIANTS as string[]).includes(variant) ? (variant as FontVariant) : 'regular';
+    const entry = fontRegistry.resolve(family || DEFAULT_FONT_FAMILY, v);
+    res.set({
+      'Content-Type': /\.otf$/i.test(entry.file) ? 'font/otf' : 'font/ttf',
+      'Cache-Control': 'private, max-age=3600',
+      'X-Font-Source': entry.source,
+      'X-Font-Family': encodeURIComponent(entry.family),
+    });
+    return new StreamableFile(fontRegistry.bytes(entry));
+  }
+
+  /**
+   * Tải font lên (vd times.ttf, timesbd.ttf, timesi.ttf, timesbi.ttf của Windows) —
+   * gửi nội dung tệp thô (application/octet-stream), tên tệp ở ?name=
+   */
+  @Post('fonts')
+  @RequirePermissions('print.template.update')
+  @Audit({ module: 'PRINT', action: 'UPLOAD', entity: 'print_font', description: 'Tải font bản in lên' })
+  @ApiOperation({ summary: 'Tải tệp font TTF/OTF lên — tự nhận diện họ font và kiểu chữ' })
+  async uploadFont(@Req() req: Request, @Query('name') name: string) {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req as AsyncIterable<Buffer>) {
+      size += chunk.length;
+      if (size > 30 * 1024 * 1024) throw new BadRequestException('Tệp font quá lớn (tối đa 30 MB)');
+      chunks.push(chunk);
+    }
+    if (!size) throw new BadRequestException('Chưa chọn tệp font');
+    if (name && !/\.(ttf|otf)$/i.test(name)) {
+      throw new BadRequestException('Chỉ nhận tệp font .ttf hoặc .otf');
+    }
+    return saveCustomFont(Buffer.concat(chunks), String(name ?? 'font.ttf'));
+  }
+
+  @Delete('fonts')
+  @RequirePermissions('print.template.update')
+  @Audit({ module: 'PRINT', action: 'DELETE', entity: 'print_font', description: 'Xoá font bản in đã tải lên' })
+  @ApiOperation({ summary: 'Xoá font đã tải lên (quay về font tương thích nhúng sẵn)' })
+  removeFont(@Query('family') family: string, @Query('variant') variant?: string) {
+    const v = variant && (FONT_VARIANTS as string[]).includes(variant) ? (variant as FontVariant) : undefined;
+    return deleteCustomFont(family, v);
   }
 
   /* ------------------------------------------------------------- Kết xuất */

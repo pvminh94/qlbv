@@ -1201,6 +1201,12 @@ export class HsbaService {
     return { detail, data };
   }
 
+  /** Dữ liệu in của phiếu (JSON) — cho trình thiết kế xem trước bằng dữ liệu thật */
+  async printData(id: number, user: AccessContext) {
+    const { data } = await this.buildPrintData(id, user);
+    return JSON.parse(JSON.stringify(data)) as Record<string, unknown>;
+  }
+
   /** Xem trước / xuất PDF phiếu theo mẫu in cấu hình được */
   async exportPdf(id: number, user: AccessContext, templateIdOrCode?: string | number) {
     const { detail, data } = await this.buildPrintData(id, user);

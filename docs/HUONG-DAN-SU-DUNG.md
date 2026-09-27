@@ -126,14 +126,38 @@ kiểu dữ liệu và danh mục giá trị do hệ thống tự cung cấp (AP
 mọi màn hình đều có cùng cách lọc. Bấm **Lưu bộ lọc** để đặt tên và dùng lại bộ điều kiện
 này về sau. Các màn *Người dùng*, *Tiện ích*, *Mẫu in*, *Nhật ký* cũng có thanh lọc này.
 
-**Thiết kế bản in ở đâu?** Vào **Quản trị → Mẫu in**, bấm **Thiết kế** ở một mẫu: màn
-thiết kế cho phép kéo thả từng phần tử theo milimét, chỉnh khổ giấy/lề/lưới, font và kiểu
-chữ, khung viền – nền, bảng động (thêm cột, nguồn dữ liệu, dòng tổng), nhiều trang, chữ
-mờ, đánh số trang và liên kết dữ liệu cho từng ô; bấm **Xem trước PDF** để kiểm tra ngay.
-Nút **Thiết kế trống** tạo bố cục mới; tab **JSON** cho phép xem/sao lưu/nạp thiết kế.
+**Thiết kế bản in ở đâu?** Vào **Quản trị → Mẫu in**, bấm **Thiết kế** ở một mẫu. Trình
+thiết kế mở **toàn màn hình** theo kiểu phần mềm thương mại:
 
-**Bản in bị lệch/thiếu chữ?** Kiểm tra *Quản trị → Mẫu in*: khổ giấy, lề và font
-(Tinos/Times hỗ trợ đầy đủ tiếng Việt). Bản in được kết xuất theo đúng mẫu đang ban hành.
+* **Ribbon** phía trên: *Trang chủ* (hoàn tác, cắt/sao chép/dán, font – cỡ chữ – đậm/nghiêng/
+  gạch chân – màu chữ/nền – căn lề – giãn dòng – khung viền), *Chèn* (chữ, trường dữ liệu,
+  bảng, đường kẻ, khung, ảnh/logo, mã QR, mã vạch, ô chữ ký, ngày giờ, số trang), *Bố trí*
+  (căn thẳng hàng, giãn đều, cùng kích thước, thứ tự lớp, khoá, ẩn khi in, lặp mọi trang),
+  *Trang in* (khổ giấy, hướng, lề, số trang tự động, chữ mờ, thêm/nhân bản/xoá trang),
+  *Xem* (thu phóng, lưới, hít lưới, đường gióng thông minh, thước đo, hiện dữ liệu mẫu).
+* **Cột trái**: Hộp công cụ, danh sách **Trường dữ liệu** (kéo thả thẳng vào trang), danh
+  sách **Đối tượng** (ẩn/khoá từng đối tượng), **Trang** và **JSON** (tải/nạp thiết kế).
+* **Khung vẽ** có thước milimét, lưới, khung chọn nhiều đối tượng, đường gióng khi kéo,
+  nhấp đúp để sửa chữ trực tiếp, chuột phải để mở menu nhanh, Ctrl + lăn chuột để thu phóng.
+* **Cột phải**: toàn bộ thuộc tính của đối tượng đang chọn (hoặc của cả bản in).
+* **Thanh trạng thái**: khổ giấy, toạ độ con trỏ, vị trí/kích thước đối tượng, thu phóng.
+
+Phím tắt chính: Ctrl+Z/Y, Ctrl+C/X/V/D, Ctrl+A, Delete, mũi tên (Shift ×10 mm, Alt ×0,1 mm),
+Ctrl+B/I/U, Ctrl+L (khoá), Ctrl+S (lưu), Ctrl+P (xem trước PDF), F1 (bảng phím tắt đầy đủ).
+Nút **Thông tin mẫu** để sửa mã/tên/loại chứng từ/khoa áp dụng; đóng trình thiết kế khi còn
+thay đổi chưa lưu, hệ thống sẽ hỏi lại.
+
+**Xem trước PDF** kết xuất đúng bằng bộ máy in của máy chủ, cho phép chọn *Dữ liệu mẫu*, *Để
+trống*, lấy dữ liệu của **một phiếu HSBA thật** (tìm theo mã/tên) hoặc sửa JSON trực tiếp.
+
+**Font chữ bản in:** mọi bản in mặc định **Times New Roman**, kể cả khi xem trước và tải PDF.
+Nút **Font chữ** trong trình thiết kế cho biết máy chủ đang dùng Times New Roman gốc hay font
+tương thích (Tinos — cùng kích thước ký tự), cho phép tải thêm font TTF/OTF khác. Để dùng
+Times New Roman gốc của Microsoft trên máy chủ, chạy `sudo bash deploy/install-times-font.sh`
+(lệnh cập nhật `deploy/update.sh` đã tự chạy bước này).
+
+**Bản in bị lệch/thiếu chữ?** Kiểm tra *Quản trị → Mẫu in*: khổ giấy, lề và font. Bản in
+được kết xuất theo đúng mẫu đang ban hành.
 
 **Quên mật khẩu?** Liên hệ quản trị để *Đặt lại mật khẩu*; lần đăng nhập kế tiếp hệ
 thống có thể yêu cầu đổi mật khẩu.

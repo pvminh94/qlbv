@@ -72,6 +72,8 @@ export interface TableSpec {
   totalRow?: boolean;
   zebra?: boolean;
   minRowHeight?: number;
+  /** Phần tử nằm dưới bảng tự dời xuống khi bảng dài ra (mặc định: có) */
+  pushDown?: boolean;
 }
 
 export interface PrintElement {
@@ -122,12 +124,43 @@ export interface PrintDocument {
   [key: string]: unknown;
 }
 
+/* ------------------------------------------------------------------ Font chữ */
+
+/** Font mặc định của mọi bản in */
+export const DEFAULT_FONT = 'Times New Roman';
+/** Font nhúng sẵn (luôn có) — danh sách đầy đủ lấy từ GET /print/fonts */
+export const BUILTIN_FONTS = ['Times New Roman', 'Arial', 'Courier New', 'Roboto'];
+/** Tên cũ → tên chuẩn (khớp backend font-registry) */
+const FONT_ALIASES: Record<string, string> = {
+  tinos: 'Times New Roman',
+  times: 'Times New Roman',
+  'liberation serif': 'Times New Roman',
+  serif: 'Times New Roman',
+  'dejavu serif': 'Times New Roman',
+  arimo: 'Arial',
+  helvetica: 'Arial',
+  'liberation sans': 'Arial',
+  'dejavu sans': 'Arial',
+  'sans-serif': 'Arial',
+  cousine: 'Courier New',
+  courier: 'Courier New',
+  'liberation mono': 'Courier New',
+  monospace: 'Courier New',
+};
+export function canonicalFont(name?: string | null): string {
+  const raw = String(name ?? '').trim();
+  if (!raw) return DEFAULT_FONT;
+  return FONT_ALIASES[raw.toLowerCase()] ?? raw;
+}
+
 /* ------------------------------------------------------------------ Khổ giấy */
 
 export const PAPER_SIZES_MM: Record<string, { width: number; height: number }> = {
   A4: { width: 210, height: 297 },
   A5: { width: 148, height: 210 },
   A3: { width: 297, height: 420 },
+  A6: { width: 105, height: 148 },
+  B5: { width: 176, height: 250 },
   Letter: { width: 215.9, height: 279.4 },
   Legal: { width: 215.9, height: 355.6 },
 };
@@ -218,7 +251,7 @@ export const ELEMENT_TYPES: {
     type: 'line',
     label: 'Đường kẻ',
     hint: 'Đường ngang/dọc phân cách',
-    make: () => ({ id: nextId('line'), type: 'line', name: 'Đường kẻ', x: 10, y: 30, w: 100, h: 0.4, style: { color: '#111827' } }),
+    make: () => ({ id: nextId('line'), type: 'line', name: 'Đường kẻ', x: 10, y: 30, w: 100, h: 0.4, style: { border: { top: { width: 0.3, style: 'solid', color: '#111827' } } } }),
   },
   {
     type: 'rect',
@@ -257,6 +290,12 @@ export const ELEMENT_TYPES: {
     make: () => ({ id: nextId('qr'), type: 'qrcode', name: 'Mã QR', x: 170, y: 8, w: 25, h: 25, binding: { source: 'field', path: 'code' } }),
   },
   {
+    type: 'barcode',
+    label: 'Mã vạch',
+    hint: 'Code128 — mã phiếu, mã bệnh nhân',
+    make: () => ({ id: nextId('bar'), type: 'barcode', name: 'Mã vạch', x: 140, y: 8, w: 55, h: 14, binding: { source: 'field', path: 'code' }, style: { fontSize: 9 } }),
+  },
+  {
     type: 'signature',
     label: 'Ô chữ ký',
     hint: 'Khối ký tên theo bước ký',
@@ -268,8 +307,9 @@ export const ELEMENT_TYPES: {
       y: 240,
       w: 65,
       h: 35,
+      text: 'NGƯỜI DUYỆT\n(Ký, ghi rõ họ tên)',
       binding: { source: 'field', path: 'signature.KHTB.fullName' },
-      style: { fontSize: 11, align: 'center', wrap: true },
+      style: { fontSize: 12, align: 'center', wrap: true },
     }),
   },
   {
@@ -303,7 +343,7 @@ export function emptyDocument(): PrintDocument {
     orientation: 'portrait',
     margins: { top: 15, right: 15, bottom: 15, left: 20 },
     grid: { size: 5, show: true, snap: true },
-    defaultStyle: { fontFamily: 'Tinos', fontSize: 12, lineHeight: 1.35 },
+    defaultStyle: { fontFamily: DEFAULT_FONT, fontSize: 13, lineHeight: 1.35 },
     pageNumbering: { show: false, position: 'bottom-center', format: '{page}/{pages}' },
     pages: [
       {

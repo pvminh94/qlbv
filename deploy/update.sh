@@ -29,6 +29,7 @@ ok()   { printf '  %s✓%s %s\n' "$C_G" "$C_0" "$*"; }
 warn() { printf '  %s!%s %s\n' "$C_Y" "$C_0" "$*"; }
 die()  { printf '\n%s✗ LỖI:%s %s\n' "$C_R" "$C_0" "$*" >&2; exit 1; }
 
+ORIG_ARGS=("$@")
 FORCE_API=0; FORCE_WEB=0; DO_PULL=1; DO_BACKUP=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -70,6 +71,12 @@ if [[ $DO_PULL -eq 1 ]]; then
   fi
 fi
 NEW=$(git rev-parse HEAD)
+# Bản thân update.sh vừa được cập nhật → chạy lại bằng bản mới (bash đang đọc bản cũ)
+if [[ "$OLD" != "$NEW" && -z "${QLBS_UPDATE_REEXEC:-}" ]] && git diff --name-only "$OLD" "$NEW" | grep -qx 'deploy/update.sh'; then
+  ok "update.sh có phiên bản mới — chạy lại bằng bản mới"
+  export QLBS_UPDATE_REEXEC=1
+  exec bash "$ROOT/deploy/update.sh" "${ORIG_ARGS[@]}" --no-pull
+fi
 
 if [[ "$OLD" == "$NEW" ]]; then
   ok "Không có commit mới từ git pull ($(git log -1 --format='%h %s'))"
@@ -97,6 +104,11 @@ BUILD=()
 if [[ $FORCE_API -eq 1 ]] || needs_build api backend/ docker-compose.yml; then BUILD+=(api); fi
 if [[ $FORCE_WEB -eq 1 ]] || needs_build web frontend/ docker-compose.yml; then BUILD+=(web); fi
 DEPLOYED_BEFORE=$(cat "$STATE_DIR/.deployed-api" 2>/dev/null || echo "$OLD")
+# Font Times New Roman gốc cho bản in PDF (chỉ tải lần đầu; lỗi không làm dừng cập nhật)
+if [[ -f deploy/install-times-font.sh ]]; then
+  bash deploy/install-times-font.sh --quiet || warn "Chưa cài được Times New Roman gốc — bản in dùng Tinos (tương thích Times New Roman)"
+fi
+
 CHANGED=$(git diff --name-only "$DEPLOYED_BEFORE" "$NEW" 2>/dev/null || true)
 COMPOSE_CHANGED=0
 grep -qE '^(docker-compose\.yml|\.env\.example)$' <<<"$CHANGED" && COMPOSE_CHANGED=1

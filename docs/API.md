@@ -72,6 +72,7 @@ Tổng **126** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 | `GET` | `/hsba/requests/stats` | Thống kê phiếu theo trạng thái và theo khoa | `hsba.request.view` |
 | `GET` | `/hsba/requests/verify/:id/:stepKey/:hash` | Xác thực chữ ký số của nội dung phiếu (dùng cho QR) | — |
 | `GET` | `/hsba/requests/:id` | Chi tiết phiếu kèm dòng thời gian ký | `hsba.request.view` |
+| `GET` | `/hsba/requests/:id/print-data` | Dữ liệu đổ vào mẫu in của phiếu (dùng khi xem trước với phiếu thật) | `hsba.request.print` |
 | `GET` | `/hsba/requests/:id/pdf` | Kết xuất phiếu ra PDF theo mẫu in cấu hình được | `hsba.request.print` |
 | `POST` | `/hsba/requests` | Tạo phiếu đề nghị sửa HSBA (tự chọn quy trình theo khoa) | `hsba.request.create` |
 | `PUT` | `/hsba/requests/:id` | Cập nhật nội dung phiếu | `hsba.request.update` |
@@ -107,6 +108,10 @@ Tổng **126** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 | `POST` | `/print/preview` | Xem trước bản in từ thiết kế đang chỉnh (trả về PDF) | `print.render.view` |
 | `POST` | `/print/templates/:id/render` | Kết xuất mẫu in ra PDF với dữ liệu truyền vào | `print.render.export` |
 | `GET` | `/print/resolve/:docType` | Tìm mẫu in đang áp dụng theo loại chứng từ | `print.render.view` |
+| `GET` | `/print/fonts` | Danh sách font bản in (mặc định Times New Roman) và trạng thái từng kiểu chữ | `print.template.view` |
+| `GET` | `/print/fonts/file?family=&variant=` | Tải tệp font (để khung thiết kế hiển thị đúng như PDF) | `print.template.view` |
+| `POST` | `/print/fonts?name=` | Tải tệp TTF/OTF lên (body octet-stream) — tự nhận họ font và kiểu chữ | `print.template.update` |
+| `DELETE` | `/print/fonts?family=&variant=` | Xoá font đã tải lên | `print.template.update` |
 
 ## Báo cáo khoa
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Copy, History, Plus, Printer, Trash2, Upload } from 'lucide-react';
+import { Copy, History, Plus, Printer, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/page-header';
@@ -68,6 +68,8 @@ export default function PrintTemplatesPage() {
   const [form, setForm] = useState<TemplateForm>(EMPTY_FORM);
   const [document, setDocument] = useState<PrintDocument>(emptyDocument());
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [savedForm, setSavedForm] = useState<TemplateForm>(EMPTY_FORM);
   const [deleting, setDeleting] = useState<PrintTemplateRow | null>(null);
   const [duplicating, setDuplicating] = useState<PrintTemplateRow | null>(null);
   const [newCode, setNewCode] = useState('');
@@ -99,21 +101,26 @@ export default function PrintTemplatesPage() {
 
   const openNew = (): void => {
     setForm(EMPTY_FORM);
+    setSavedForm(EMPTY_FORM);
     setDocument(emptyDocument());
+    setInfoOpen(true);
     setEditing('new');
   };
 
   const openEdit = async (row: PrintTemplateRow): Promise<void> => {
     setEditing(row.id);
     setLoadingDetail(true);
-    setForm({
+    setInfoOpen(false);
+    const f: TemplateForm = {
       code: row.code,
       name: row.name,
       description: row.description ?? '',
       module: row.module,
       docType: row.docType,
       departmentId: row.departmentId,
-    });
+    };
+    setForm(f);
+    setSavedForm(f);
     try {
       const detail = await apiFetch<PrintTemplateDetail>(`/print/templates/${row.id}`);
       setDocument(detail.document ?? emptyDocument());
@@ -127,7 +134,10 @@ export default function PrintTemplatesPage() {
 
   const save = useMutation({
     mutationFn: async (nextDocument: PrintDocument) => {
-      if (!form.code.trim() || !form.name.trim()) throw new Error('Cần nhập mã và tên mẫu in');
+      if (!form.code.trim() || !form.name.trim()) {
+        setInfoOpen(true);
+        throw new Error('Cần nhập mã và tên mẫu in (bấm “Thông tin mẫu”)');
+      }
       const payload = {
         ...form,
         paperSize: nextDocument.paperSize,
@@ -135,13 +145,15 @@ export default function PrintTemplatesPage() {
         document: nextDocument,
       };
       if (typeof editing === 'number') {
-        return apiFetch(`/print/templates/${editing}`, { method: 'PUT', body: payload });
+        return apiFetch<PrintTemplateRow>(`/print/templates/${editing}`, { method: 'PUT', body: payload });
       }
-      return apiFetch('/print/templates', { method: 'POST', body: payload });
+      return apiFetch<PrintTemplateRow>('/print/templates', { method: 'POST', body: payload });
     },
-    onSuccess: async () => {
+    onSuccess: async (row) => {
       toast.success('Đã lưu mẫu in');
-      setEditing(null);
+      // Giữ trình thiết kế mở để tiếp tục chỉnh; mẫu mới chuyển sang chế độ sửa
+      if (row && typeof row.id === 'number') setEditing(row.id);
+      setSavedForm(form);
       await queryClient.invalidateQueries({ queryKey: ['print-templates'] });
     },
     onError: (err) => toast.error((err as Error).message),
@@ -193,93 +205,93 @@ export default function PrintTemplatesPage() {
   /* ------------------------------------------------------------- Trình thiết kế */
 
   if (editing !== null) {
-    return (
-      <div className="space-y-4">
-        <PageHeader
-          title={editing === 'new' ? 'Thêm mẫu in' : `Thiết kế bản in: ${form.name || form.code}`}
-          description="Kéo thả để đặt vị trí, chỉnh từng thuộc tính ở cột phải, xem trước PDF ngay khi thiết kế"
-          actions={
-            <Button variant="outline" onClick={() => setEditing(null)}>
-              <ArrowLeft /> Về danh sách
-            </Button>
-          }
-        />
-
-        <Card>
-          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="t-code">Mã mẫu *</Label>
-              <Input
-                id="t-code"
-                value={form.code}
-                disabled={editing !== 'new'}
-                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                placeholder="PHIEU_SUA_HSBA"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="t-name">Tên mẫu *</Label>
-              <Input id="t-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="t-module">Phân hệ</Label>
-              <Select id="t-module" value={form.module} onChange={(e) => setForm({ ...form, module: e.target.value })}>
-                {MODULES.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="t-doc">Loại chứng từ</Label>
-              <Select id="t-doc" value={form.docType} onChange={(e) => setForm({ ...form, docType: e.target.value })}>
-                {DOC_TYPES.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="t-dept">Áp dụng cho khoa</Label>
-              <Select
-                id="t-dept"
-                value={form.departmentId ?? ''}
-                onChange={(e) => setForm({ ...form, departmentId: e.target.value ? Number(e.target.value) : null })}
-              >
-                <option value="">— Toàn viện —</option>
-                {(departments.data ?? []).map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="t-desc">Mô tả</Label>
-              <Input
-                id="t-desc"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-              />
-            </div>
-          </div>
-        </Card>
-
-        {loadingDetail ? (
-          <Skeleton className="h-[78vh]" />
-        ) : (
-          <PrintDesigner
-            document={document}
-            saving={save.isPending}
-            onSave={(next) => {
-              setDocument(next);
-              save.mutate(next);
-            }}
+    const infoPanel = (
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="t-code">Mã mẫu *</Label>
+          <Input
+            id="t-code"
+            value={form.code}
+            disabled={editing !== 'new'}
+            onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+            placeholder="PHIEU_SUA_HSBA"
           />
-        )}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="t-name">Tên mẫu *</Label>
+          <Input id="t-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="t-module">Phân hệ</Label>
+          <Select id="t-module" value={form.module} onChange={(e) => setForm({ ...form, module: e.target.value })}>
+            {MODULES.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="t-doc">Loại chứng từ</Label>
+          <Select id="t-doc" value={form.docType} onChange={(e) => setForm({ ...form, docType: e.target.value })}>
+            {DOC_TYPES.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="t-dept">Áp dụng cho khoa</Label>
+          <Select
+            id="t-dept"
+            value={form.departmentId ?? ''}
+            onChange={(e) => setForm({ ...form, departmentId: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">— Toàn viện —</option>
+            {(departments.data ?? []).map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="t-desc">Mô tả</Label>
+          <Input id="t-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        </div>
       </div>
+    );
+
+    if (loadingDetail) {
+      return (
+        <div className="fixed inset-0 z-[45] flex items-center justify-center bg-[var(--background)]">
+          <div className="w-full max-w-3xl space-y-3 p-6">
+            <Skeleton className="h-10" />
+            <Skeleton className="h-[60vh]" />
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <PrintDesigner
+        document={document}
+        title={editing === 'new' ? 'Mẫu in mới' : form.name || form.code}
+        subtitle={`${form.code || 'Chưa có mã'} · ${form.module} · ${form.docType}`}
+        saving={save.isPending}
+        readOnly={!can(editing === 'new' ? 'print.template.create' : 'print.template.update')}
+        onSave={(next) => save.mutateAsync(next)}
+        extraDirty={JSON.stringify(form) !== JSON.stringify(savedForm)}
+        infoPanel={infoPanel}
+        infoOpen={infoOpen}
+        setInfoOpen={setInfoOpen}
+        canManageFonts={can('print.template.update') || can('print.template.create')}
+        onClose={() => {
+          setEditing(null);
+          setInfoOpen(false);
+        }}
+      />
     );
   }
 

@@ -118,6 +118,13 @@ export class HsbaRequestController {
     return this.service.findOne(id, user);
   }
 
+  @Get(':id/print-data')
+  @RequirePermissions('hsba.request.print')
+  @ApiOperation({ summary: 'Dữ liệu của phiếu dùng cho bản in (trình thiết kế mẫu in dùng để xem trước bằng dữ liệu thật)' })
+  printData(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AccessContext) {
+    return this.service.printData(id, user);
+  }
+
   @Get(':id/pdf')
   @RequirePermissions('hsba.request.print')
   @ApiOperation({ summary: 'Kết xuất phiếu ra PDF theo mẫu in cấu hình được' })

@@ -110,6 +110,8 @@ export interface TableSpec {
   totalRow?: boolean;
   zebra?: boolean;
   minRowHeight?: number;
+  /** Phần tử nằm dưới bảng tự dời xuống khi bảng dài ra (mặc định: có) */
+  pushDown?: boolean;
 }
 
 /** Một phần tử trên bản in */

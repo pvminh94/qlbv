@@ -380,6 +380,8 @@ if [[ ${#fail_ports[@]} -gt 0 ]]; then
   die 'cổng bị chiếm — dừng TRƯỚC khi dựng ảnh để không mất thời gian build.'
 fi
 mkdir -p data/postgres data/redis data/uploads data/backups
+# Font Times New Roman gốc cho bản in PDF (lỗi không làm dừng cài đặt)
+bash deploy/install-times-font.sh --quiet || true
 "${COMPOSE[@]}" up -d --build
 ok "Đã khởi động: PostgreSQL · Redis · API · Web"
 

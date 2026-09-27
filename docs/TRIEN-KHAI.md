@@ -179,6 +179,17 @@ Trước khi nâng cấp nên sao lưu CSDL. Nếu bản mới có thay đổi c
 áp dụng; trường hợp cần quay lại phiên bản cũ: `git checkout <tag>` rồi
 `docker compose up -d --build` và phục hồi bản sao lưu tương ứng.
 
+### Font Times New Roman cho bản in
+
+Mọi bản in PDF mặc định dùng **Times New Roman**. Mã nguồn chỉ kèm font tương thích mã nguồn
+mở (Tinos/Arimo/Cousine — giấy phép SIL OFL, cùng kích thước ký tự với Times New Roman/Arial/
+Courier New). `deploy/install.sh` và `deploy/update.sh` tự chạy `deploy/install-times-font.sh`
+để tải bộ *Core fonts for the Web* của Microsoft và cài **Times New Roman gốc** vào thư mục
+font của bản in (`${UPLOAD_HOST_DIR:-./data/uploads}/fonts`). Máy chủ tự nhận font mới trong
+vài giây, không cần khởi động lại. Nếu máy chủ không ra được Internet, quản trị có thể tải 4
+tệp `times.ttf`, `timesbd.ttf`, `timesi.ttf`, `timesbi.ttf` lên tại *Quản trị → Mẫu in →
+Thiết kế → Font chữ*.
+
 ## 6. Xử lý sự cố
 
 | Hiện tượng | Cách xử lý |

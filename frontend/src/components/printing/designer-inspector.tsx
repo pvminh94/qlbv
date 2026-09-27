@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { FALLBACK_VARIABLES, nextId, type PrintDocument, type PrintElement } from './print-types';
+import { BUILTIN_FONTS, FALLBACK_VARIABLES, canonicalFont, nextId, type PrintDocument, type PrintElement } from './print-types';
+import { cssFontFamily } from './print-fonts';
 
 type Tab = 'position' | 'style' | 'box' | 'data' | 'advanced';
 
@@ -17,7 +18,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'advanced', label: 'Nâng cao' },
 ];
 
-const FONTS = ['Tinos', 'Times New Roman', 'DejaVu Sans', 'Arial', 'Roboto', 'Courier New'];
 const FORMAT_TYPES = ['text', 'number', 'integer', 'currency', 'percent', 'date', 'datetime', 'bool', 'formula'];
 const BINDING_SOURCES = [
   { value: 'field', label: 'Trường dữ liệu' },
@@ -33,14 +33,30 @@ interface InspectorProps {
   element: PrintElement | null;
   onChange: (id: string, patch: Partial<PrintElement>) => void;
   onCommit: () => void;
+  /** Danh sách họ font (GET /print/fonts) */
+  fonts?: string[];
+}
+
+function FontOptions({ fonts }: { fonts: string[] }) {
+  return (
+    <>
+      {fonts.map((f) => (
+        <option key={f} value={f} style={{ fontFamily: cssFontFamily(f) }}>
+          {f}
+          {f === 'Times New Roman' ? ' (mặc định)' : ''}
+        </option>
+      ))}
+    </>
+  );
 }
 
 /** Bảng thuộc tính chi tiết cho phần tử đang chọn (và cho toàn trang khi chưa chọn gì). */
-export function DesignerInspector({ doc, element, onChange, onCommit }: InspectorProps) {
+export function DesignerInspector({ doc, element, onChange, onCommit, fonts: fontList }: InspectorProps) {
   const [tab, setTab] = useState<Tab>('position');
+  const fonts = fontList?.length ? fontList : BUILTIN_FONTS;
 
   if (!element) {
-    return <DocumentInspector doc={doc} onChange={onChange} onCommit={onCommit} />;
+    return <DocumentInspector doc={doc} onChange={onChange} onCommit={onCommit} fonts={fonts} />;
   }
 
   const style = element.style ?? {};
@@ -100,8 +116,20 @@ export function DesignerInspector({ doc, element, onChange, onCommit }: Inspecto
                 onCommit={onCommit}
               />
             </div>
-            {element.type === 'text' ? (
-              <Row label="Nội dung chữ">
+            {['text', 'signature', 'rect', 'datetime', 'pageNumber', 'barcode', 'qrcode'].includes(element.type) ? (
+              <Row
+                label={
+                  element.type === 'signature'
+                    ? 'Tiêu đề ô ký (dòng 1 đậm, dòng sau nghiêng)'
+                    : element.type === 'datetime'
+                      ? 'Mẫu ngày giờ (dd/MM/yyyy HH:mm) hoặc chữ có {biến}'
+                      : element.type === 'pageNumber'
+                        ? 'Mẫu số trang: Trang {page}/{pages}'
+                        : element.type === 'barcode' || element.type === 'qrcode'
+                          ? 'Nội dung cố định (khi không gắn trường dữ liệu)'
+                          : 'Nội dung chữ — chèn dữ liệu bằng {đường.dẫn}'
+                }
+              >
                 <textarea
                   className="min-h-20 w-full rounded-lg border bg-[var(--background)] p-2 text-xs"
                   value={element.text ?? ''}
@@ -116,12 +144,13 @@ export function DesignerInspector({ doc, element, onChange, onCommit }: Inspecto
         {tab === 'style' ? (
           <>
             <Row label="Font chữ">
-              <Select className="h-8 text-xs" value={style.fontFamily ?? 'Tinos'} onChange={(e) => { setStyle({ fontFamily: e.target.value }); onCommit(); }}>
-                {FONTS.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
+              <Select
+                className="h-8 text-xs"
+                style={{ fontFamily: cssFontFamily(style.fontFamily ?? doc.defaultStyle?.fontFamily) }}
+                value={canonicalFont(style.fontFamily ?? doc.defaultStyle?.fontFamily)}
+                onChange={(e) => { setStyle({ fontFamily: e.target.value }); onCommit(); }}
+              >
+                <FontOptions fonts={Array.from(new Set([...fonts, canonicalFont(style.fontFamily ?? doc.defaultStyle?.fontFamily)]))} />
               </Select>
             </Row>
             <div className="grid grid-cols-2 gap-2">
@@ -405,10 +434,12 @@ function DocumentInspector({
   doc,
   onChange,
   onCommit,
+  fonts,
 }: {
   doc: PrintDocument;
   onChange: (id: string, patch: Partial<PrintElement>) => void;
   onCommit: () => void;
+  fonts: string[];
 }) {
   const patchDoc = (patch: Record<string, unknown>): void =>
     onChange('__document__', patch as unknown as Partial<PrintElement>);
@@ -489,14 +520,11 @@ function DocumentInspector({
         <Row label="Font">
           <Select
             className="h-8 text-xs"
-            value={doc.defaultStyle?.fontFamily ?? 'Tinos'}
+            style={{ fontFamily: cssFontFamily(doc.defaultStyle?.fontFamily) }}
+            value={canonicalFont(doc.defaultStyle?.fontFamily)}
             onChange={(e) => { patchDoc({ defaultStyle: { ...(doc.defaultStyle ?? {}), fontFamily: e.target.value } }); onCommit(); }}
           >
-            {FONTS.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
+            <FontOptions fonts={Array.from(new Set([...fonts, canonicalFont(doc.defaultStyle?.fontFamily)]))} />
           </Select>
         </Row>
         <div className="grid grid-cols-2 gap-2">
