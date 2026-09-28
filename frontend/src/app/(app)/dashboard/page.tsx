@@ -2,7 +2,7 @@
 
 /**
  * Bảng điều khiển — trang Studio mặc định (cá nhân → vai trò → hệ thống).
- * NgườI dùng có quyền thiết kế có thể chỉnh sửa trực tiếp hoặc nhân bản
+ * Người dùng có quyền thiết kế có thể chỉnh sửa trực tiếp hoặc nhân bản
  * thành bản riêng (kéo-thả, thêm ô, tự chọn nguồn số liệu).
  */
 import { useQuery } from '@tanstack/react-query';

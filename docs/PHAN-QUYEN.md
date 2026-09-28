@@ -1,173 +1,159 @@
 # Phân quyền — QLBS
 
-Hệ thống dùng **PBAC**: mỗi endpoint yêu cầu mã quyền cụ thể, vai trò chỉ là tập hợp quyền.
-Tất cả quyền, vai trò và phạm vi dữ liệu đều sửa được trong *Quản trị → Vai trò* (và gán lại cho người dùng),
-không có phần nào bị cứng trong mã nguồn.
+> Tài liệu mô tả đầy đủ mô hình phân quyền sau cải tiến 2026-09. Nếu thay đổi vai trò/quyền mặc định
+> trong `backend/src/db/seed-data.ts`, hãy tái sinh **mục 3–4** bằng cách chạy lại lệnh ở cuối tài liệu.
 
-## 1. Danh mục quyền (100 quyền)
+Hệ thống dùng **PBAC** (permission-based access control): mỗi endpoint/backend yêu cầu mã quyền cụ thể,
+vai trò chỉ là tập hợp quyền kèm **phạm vi dữ liệu**. Quản trị viên thao tác toàn bộ trên giao diện
+*Quản trị → Vai trò* và *Quản trị → Người dùng* — không cần sửa mã nguồn.
 
-| Mã quyền | Ý nghĩa |
-|---|---|
-| `dashboard.view` | Xem trang tổng quan |
-| `dashboard.view-all` | Xem tổng quan toàn viện |
-| `department.view` | Xem đơn vị / khoa phòng |
-| `department.create` | Thêm đơn vị / khoa phòng |
-| `department.update` | Sửa đơn vị / khoa phòng |
-| `department.delete` | Xoá đơn vị / khoa phòng |
-| `job_title.view` | Xem danh mục chức danh |
-| `job_title.create` | Thêm chức danh |
-| `job_title.update` | Sửa chức danh |
-| `job_title.delete` | Xoá chức danh |
-| `user.view` | Xem danh sách người dùng |
-| `user.create` | Thêm người dùng |
-| `user.update` | Sửa người dùng |
-| `user.delete` | Xoá người dùng |
-| `user.reset-password` | Đặt lại mật khẩu người dùng |
-| `user.assign-role` | Gán vai trò cho người dùng |
-| `user.import` | Nhập danh sách người dùng |
-| `user.export` | Kết xuất danh sách người dùng |
-| `role.view` | Xem vai trò và quyền |
-| `role.create` | Thêm vai trò |
-| `role.update` | Sửa vai trò và gán quyền |
-| `role.delete` | Xoá vai trò |
-| `hsba.workflow.view` | Xem quy trình ký |
-| `hsba.workflow.create` | Thêm quy trình ký |
-| `hsba.workflow.update` | Sửa quy trình ký |
-| `hsba.workflow.delete` | Xoá quy trình ký |
-| `hsba.request.view` | Xem phiếu đề nghị sửa HSBA |
-| `hsba.request.view-all` | Xem phiếu của mọi khoa |
-| `hsba.request.create` | Tạo phiếu đề nghị sửa HSBA |
-| `hsba.request.update` | Sửa nội dung phiếu |
-| `hsba.request.delete` | Xoá phiếu |
-| `hsba.request.sign-requester` | Ký với tư cách người đề nghị |
-| `hsba.request.sign-khtb` | Duyệt / ký TB.KHTH |
-| `hsba.request.sign-finance` | Xác nhận tài chính đã hủy thanh toán |
-| `hsba.request.return` | Trả lại phiếu kèm lý do |
-| `hsba.request.cancel` | Huỷ phiếu đã tạo |
-| `hsba.request.assign-requester` | Chỉ định người đề nghị trên phiếu |
-| `hsba.request.export` | Kết xuất phiếu ra PDF/Word/Excel |
-| `hsba.request.print` | In phiếu |
-| `hsba.request.comment` | Ghi ý kiến trên phiếu |
-| `report.template.view` | Xem mẫu báo cáo |
-| `report.template.create` | Thêm mẫu báo cáo |
-| `report.template.update` | Sửa cấu trúc mẫu báo cáo |
-| `report.template.delete` | Xoá mẫu báo cáo |
-| `report.entry.view` | Xem số liệu báo cáo |
-| `report.entry.update` | Nhập / sửa số liệu báo cáo |
-| `report.entry.delete` | Xoá số liệu báo cáo |
-| `report.entry.import` | Nhập số liệu từ Excel |
-| `report.entry.view-audit` | Xem lịch sử sửa số liệu |
-| `report.view.view` | Xem báo cáo công tác |
-| `report.view.all-departments` | Xem báo cáo của mọi khoa |
-| `report.export.excel` | Kết xuất báo cáo ra Excel |
-| `report.export.word` | Kết xuất báo cáo ra Word |
-| `report.export.pdf` | Kết xuất báo cáo ra PDF |
-| `report.summary.view` | Xem bảng tổng hợp toàn viện |
-| `report.snapshot.create` | Chốt số liệu kỳ báo cáo |
-| `report.snapshot.approve` | Duyệt báo cáo đã chốt |
-| `report.snapshot.lock` | Khoá báo cáo đã duyệt |
-| `print.template.view` | Xem mẫu in |
-| `print.template.create` | Thêm mẫu in |
-| `print.template.update` | Thiết kế / sửa mẫu in |
-| `print.template.delete` | Xoá mẫu in |
-| `print.template.publish` | Ban hành mẫu in |
-| `print.render.view` | Xem trước bản in |
-| `print.render.export` | Kết xuất bản in ra PDF |
-| `utility.view` | Xem tiện ích |
-| `utility.create` | Thêm tiện ích |
-| `utility.update` | Sửa tiện ích |
-| `utility.delete` | Xoá tiện ích |
-| `job.view` | Xem tác vụ định kỳ |
-| `job.create` | Thêm tác vụ định kỳ |
-| `job.update` | Sửa tác vụ định kỳ |
-| `job.delete` | Xoá tác vụ định kỳ |
-| `job.run` | Chạy tác vụ ngay |
-| `audit.log.view` | Xem nhật ký kiểm toán |
-| `setting.view` | Xem cấu hình hệ thống |
-| `setting.update` | Sửa cấu hình hệ thống |
-| `data.import` | Nhập dữ liệu từ tệp |
-| `data.export` | Kết xuất dữ liệu ra tệp |
-| `backup.view` | Xem lịch sử sao lưu |
-| `backup.create` | Tạo bản sao lưu |
-| `backup.restore` | Phục hồi từ bản sao lưu |
-| `file.upload` | Tải tệp lên |
-| `file.delete` | Xoá tệp đã tải lên |
-| `studio.dashboard.view` | Xem & tự tạo bảng điều khiển của riêng mình, nhân bản trang hệ thống |
-| `studio.dashboard.manage` | Tạo/sửa/xoá bảng điều khiển **phạm vi hệ thống/vai trò** (cho cả viện xem) |
-| `studio.report.view` | Vào trang Báo cáo tuỳ biến, tự tạo báo cáo cá nhân, xuất Excel theo quyền nguồn |
-| `studio.report.manage` | Tạo/sửa báo cáo tuỳ biến **phạm vi hệ thống/vai trò** |
-| `asset.view` | Xem tài sản (danh sách, hồ sơ, dòng thời gian — theo phạm vi khoa) |
-| `asset.view-all` | Xem tài sản toàn viện (bỏ qua giới hạn khoa) |
-| `asset.create` | Thêm tài sản (kể cả thêm cả lô nhiều chiếc) |
-| `asset.update` | Sửa hồ sơ tài sản (trường nhạy cảm bị khoá sau khi phát sinh nghiệp vụ) |
-| `asset.delete` | Xoá tài sản chưa phát sinh chứng từ đã duyệt / chưa chốt khấu hao |
-| `asset.import` | Nhập tài sản từ Excel/CSV |
-| `asset.export` | Xuất danh sách tài sản ra Excel |
-| `asset.dashboard` | Xem tổng quan tài sản |
-| `asset.label.print` | In tem QR / mã vạch |
-| `asset.catalog.view` | Xem danh mục loại tài sản, vị trí, nhà cung cấp, nguồn vốn |
-| `asset.catalog.manage` | Quản lý các danh mục trên |
-| `asset.transaction.view` | Xem chứng từ nghiệp vụ tài sản, in biên bản |
-| `asset.transaction.create` | Lập / sửa / gửi duyệt / huỷ chứng từ của mình |
-| `asset.transaction.approve` | Duyệt, từ chối chứng từ (duyệt mới áp dụng vào tài sản) |
-| `asset.depreciation.view` | Xem khấu hao / hao mòn, xuất sổ theo dõi |
-| `asset.depreciation.run` | Tính, chốt và huỷ kỳ khấu hao / hao mòn |
-| `asset.inventory.view` | Xem đợt kiểm kê (danh sách, tiến độ, kết quả, biên bản, Excel) |
-| `asset.inventory.manage` | Lập & điều hành kiểm kê: chốt sổ sách, khoá số liệu, xử lý chênh lệch, huỷ |
-| `asset.inventory.scan` | Tham gia quét mã / xác nhận trong đợt được phân công hoặc thuộc khoa |
-| `asset.inventory.approve` | Duyệt kết quả kiểm kê (hoàn tất, cập nhật hồ sơ) |
-| `asset.report.view` | Xem báo cáo tài sản chuẩn (sổ TSCĐ, tăng giảm, theo khoa, chi phí, đến hạn, thanh lý, kiểm kê) |
+## 1. Ba trụ cột của phân quyền
 
-## 2. Vai trò mặc định
+1. **Quyền chức năng** (`permissions`) — ~100 mã dạng `module.action` (vd `hsba.request.create`,
+   `report.snapshot.approve`). Endpoint khai báo `@RequirePermissions('...')`; FE ẩn/hiện nút bằng `can('...')`.
+2. **Phạm vi dữ liệu** (`roles.data_scope`):
+   - `OWN` — chỉ dữ liệu do chính mình tạo;
+   - `DEPT` — dữ liệu các khoa được gán (xem *Quyền theo khoa* bên dưới);
+   - `ALL` — toàn viện.
+3. **Gán khoa** (`user_department_scopes`) — danh sách khoa một người được nhìn khi vai trò có phạm vi `DEPT`.
 
-| Mã | Tên | Phạm vi dữ liệu | Mô tả |
-|---|---|---|---|
-| `SUPER_ADMIN` | Quản trị tối cao | `ALL` | Toàn quyền hệ thống, không thể bị giới hạn bởi bất kỳ cấu hình nào |
-| `ADMIN` | Quản trị hệ thống | `ALL` | Quản lý người dùng, khoa phòng, cấu hình, mẫu báo cáo và mẫu in |
-| `KHTB` | Duyệt – TB.KHTH | `ALL` | Duyệt hoặc trả lại phiếu đề nghị sửa hồ sơ bệnh án |
-| `TAI_CHINH` | Tài chính (hủy thanh toán) | `ALL` | Xác nhận đã hủy thanh toán BHYT cho hồ sơ bệnh án |
-| `NHAP_LIEU` | Nhập liệu / Người đề nghị | `OWN` | Tạo phiếu đề nghị sửa hồ sơ bệnh án và ký với tư cách người đề nghị |
-| `TRUONG_KHOA` | Trưởng khoa | `DEPT` | Nhập và chịu trách nhiệm số liệu báo cáo của khoa mình |
-| `NHAP_BAO_CAO` | Nhập báo cáo khoa | `DEPT` | Chỉ nhập số liệu báo cáo công tác của khoa được gán |
-| `XEM_BAO_CAO` | Xem báo cáo | `DEPT` | Chỉ xem và kết xuất báo cáo, không sửa số liệu |
-| `QL_TAI_SAN` | Quản lý tài sản | `ALL` | Phòng Vật tư – TBYT / Tài chính: toàn bộ quyền `asset.*` (hồ sơ, chứng từ, duyệt, khấu hao, in tem) |
+Quy tắc hợp nhất khi một người có nhiều vai trò (thiên về "rộng nhất" để tránh mất quyền bất ngờ):
 
-> `TRUONG_KHOA` được thêm: `asset.view`, `asset.dashboard`, `asset.transaction.view/create`, `asset.catalog.view`, `asset.inventory.view/scan`, `asset.report.view` — xem tài sản của khoa, lập đề nghị cho phòng Vật tư duyệt, tham gia quét kiểm kê tại khoa, xem báo cáo trong phạm vi khoa.
+- **Quyền** = HỢP NHẤT quyền của mọi vai trò;
+- **Phạm vi** = phạm vi RỘNG NHẤT (`ALL` > `DEPT` > `OWN`);
+- **Khoa** = HỢP NHẤT mọi khoa đã gán.
 
-> `SUPER_ADMIN` có toàn bộ quyền và bỏ qua mọi kiểm tra (kể cả phạm vi dữ liệu);
-> các vai trò còn lại chỉ có đúng những quyền được gán trong *Quản trị → Vai trò*.
+`SUPER_ADMIN` đặc biệt: luôn có **mọi quyền ngầm** (kể cả quyền chưa gán, kể cả quyền mới thêm về sau),
+toàn viện, và không bị trừ quyền bởi bất kỳ cấu hình nào.
 
-## 3. Phạm vi dữ liệu (data scope)
+## 2. Quy tắc bất biến (không thể vô hiệu từ giao diện)
 
-| Giá trị | Người dùng thấy được |
-|---|---|
-| `ALL` | Toàn bộ dữ liệu của bệnh viện |
-| `DEPT` | Dữ liệu của (các) khoa được gán cho tài khoản |
-| `OWN` | Chỉ phiếu/bản ghi do mình tạo hoặc mình là người đề nghị |
+| # | Quy tắc | Lý do an toàn |
+|---|---|---|
+| 1 | Vai trò `SUPER_ADMIN` không sửa được tập quyền; chỉ đổi được mô tả + màu | Tránh khoá chết quyền hệ thống |
+| 2 | Chỉ `SUPER_ADMIN` mới được **gán/gỡ** vai trò `SUPER_ADMIN` cho bất kỳ ai | Chống leo thang quyền |
+| 3 | Không thể gỡ `SUPER_ADMIN` khỏi người DUY NHẤT còn lại | Tránh mất hoàn toàn quyền quản trị |
+| 4 | Tài khoản có vai trò `SUPER_ADMIN` chỉ `SUPER_ADMIN` khác mới chạm (đổi/xoá/khoá/đặt lại mật khẩu) | Bảo vệ tài khoản chủ |
+| 5 | Không tự khoá/xoá/đặt lại mật khẩu **chính mình** từ trang quản trị | Chống tự khoá cổng |
+| 6 | Tài khoản gốc tạo lúc cài đặt không bị xoá/vô hiệu | Luôn còn lối vào hệ thống |
+| 7 | Vai trò hệ thống không bị tắt hoạt động; chỉ xoá được vai trò chưa có người dùng | Tránh vỡ ma trận chuẩn |
+| 8 | `backup.restore` và `setting.update` chỉ thuộc `SUPER_ADMIN` | Hai thao tác nguy hiểm nhất |
+| 9 | Mật khẩu tạm do hệ thống phát sinh khi đặt lại — buộc đổi lần đăng nhập tới, mọi phiên cũ bị thu hồi | Chống mật khẩu mặc định tồn tại dai |
 
-**Tài sản:** không có `asset.view-all` thì chỉ thấy tài sản thuộc các khoa được gán cho tài khoản, hoặc tài sản mình đang giữ (người giữ). Chứng từ: thấy chứng từ mình lập hoặc có khoa đi/đến trong phạm vi.
+## 3. Ma trận vai trò mặc định
 
-Quyền `*.view-all` cho phép xem toàn viện dù vai trò có phạm vi hẹp hơn (ví dụ `hsba.request.view-all`, `report.view.all-departments`).
+| Vai trò | Mã | Phạm vi dữ liệu | Ưu tiên | Số quyền | Tóm tắt quyền chính |
+|---|---|---|---|---|---|
+| Quản trị tối cao | `SUPER_ADMIN` | Toàn viện | 1 | * | Toàn bộ quyền (kể cả quyền mới thêm về sau, không thể chỉnh) |
+| Quản trị hệ thống | `ADMIN` | Toàn viện | 10 | 76 | Vận hành: dashboard, studio, department, job_title, user, role, hsba, report, print, utility, job, audit, setting, data, backup, file, asset — KHÔNG có backup.restore, setting.update và quyền nghiệp vụ |
+| Ban giám đốc / Lãnh đạo xét duyệt | `LANH_DAO` | Toàn viện | 15 | 30 | dashboard, studio, hsba, report, asset, print, utility |
+| Duyệt — TB.KHTH | `KHTB` | Toàn viện | 20 | 22 | dashboard, studio, hsba, report, print, utility |
+| Tài chính (huỷ thanh toán) | `TAI_CHINH` | Toàn viện | 20 | 13 | dashboard, studio, hsba, report, utility |
+| Quản lý tài sản | `QL_TAI_SAN` | Toàn viện | 25 | 28 | dashboard, studio, asset, print, utility, file |
+| Trưởng khoa | `TRUONG_KHOA` | Theo khoa | 30 | 26 | dashboard, studio, report, print, hsba, asset, utility, file |
+| Người đề nghị sửa HSBA | `NHAP_LIEU` | Cá nhân | 40 | 11 | dashboard, studio, hsba, file, utility |
+| Nhân viên thống kê nhập báo cáo | `NHAP_BAO_CAO` | Theo khoa | 50 | 8 | dashboard, studio, report, utility |
+| Xem báo cáo | `XEM_BAO_CAO` | Theo khoa | 60 | 7 | dashboard, studio, report, utility |
 
-## 4. Gợi ý phân vai
+## 4. Danh mục đầy đủ quyền theo vai trò
 
-| Việc cần làm | Quyền tối thiểu |
-|---|---|
-| Tạo và ký phiếu sửa HSBA | `hsba.request.create`, `hsba.request.update`, `hsba.request.sign-requester` |
-| Duyệt phiếu (TB.KHTH) | `hsba.request.view-all`, `hsba.request.sign-khtb`, `hsba.request.return` |
-| Xác nhận huỷ thanh toán | `hsba.request.sign-finance`, `hsba.request.return` |
-| Nhập số liệu báo cáo | `report.entry.view`, `report.entry.update` |
-| Chốt số liệu kỳ báo cáo | `report.snapshot.create` |
-| Duyệt / khoá bản chốt | `report.snapshot.approve`, `report.snapshot.lock` |
-| Thiết kế mẫu báo cáo | `report.template.*` |
-| Thiết kế mẫu in | `print.template.*`, `print.render.export` |
-| Quản trị hệ thống | `user.*`, `role.*`, `department.*`, `setting.*` |
+### Quản trị tối cao (`SUPER_ADMIN`)
 
-## 5. Kiểm tra nhanh
+> Tài khoản chủ của hệ thống — toàn quyền ngầm, bỏ qua mọi kiểm tra. Chỉ nên dùng 1 tài khoản dự phòng, hạn chế dùng hằng ngày
+
+Toàn bộ quyền ngầm — không cần liệt kê; chỉ Quản trị tối cao mới gán được vai trò này.
+
+### Quản trị hệ thống (`ADMIN`)
+
+> Quản lý người dùng, vai trò, khoa phòng, danh mục, mẫu báo cáo/in, tác vụ, sao lưu và tiện ích — KHÔNG thao tác nghiệp vụ, KHÔNG phục hồi CSDL, KHÔNG sửa cấu hình hệ thống
+
+`dashboard.view` · `dashboard.view-all` · `studio.dashboard.view` · `studio.dashboard.manage` · `studio.report.view` · `studio.report.manage` · `department.view` · `department.create` · `department.update` · `department.delete` · `job_title.view` · `job_title.create` · `job_title.update` · `job_title.delete` · `user.view` · `user.create` · `user.update` · `user.delete` · `user.reset-password` · `user.assign-role` · `user.import` · `user.export` · `role.view` · `role.create` · `role.update` · `role.delete` · `hsba.workflow.view` · `hsba.workflow.create` · `hsba.workflow.update` · `hsba.workflow.delete` · `report.template.view` · `report.template.create` · `report.template.update` · `report.template.delete` · `print.template.view` · `print.template.create` · `print.template.update` · `print.template.delete` · `print.template.publish` · `print.render.view` · `print.render.export` · `utility.view` · `utility.create` · `utility.update` · `utility.delete` · `job.view` · `job.create` · `job.update` · `job.delete` · `job.run` · `audit.log.view` · `setting.view` · `data.import` · `data.export` · `backup.view` · `backup.create` · `file.upload` · `file.delete` · `hsba.request.view` · `hsba.request.view-all` · `report.entry.view` · `report.entry.view-audit` · `report.view.view` · `report.view.all-departments` · `report.summary.view` · `report.export.excel` · `report.export.word` · `report.export.pdf` · `asset.view` · `asset.view-all` · `asset.dashboard` · `asset.catalog.view` · `asset.transaction.view` · `asset.inventory.view` · `asset.depreciation.view` · `asset.report.view`
+
+### Ban giám đốc / Lãnh đạo xét duyệt (`LANH_DAO`)
+
+> Xem toàn bộ dữ liệu đọc của bệnh viện; duyệt & khoá bản chốt kỳ báo cáo, duyệt chứng từ tài sản và biên bản kiểm kê
+
+`dashboard.view` · `dashboard.view-all` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.view-all` · `hsba.request.export` · `hsba.request.print` · `report.view.view` · `report.view.all-departments` · `report.summary.view` · `report.export.excel` · `report.export.word` · `report.export.pdf` · `report.snapshot.approve` · `report.snapshot.lock` · `asset.view` · `asset.view-all` · `asset.dashboard` · `asset.export` · `asset.catalog.view` · `asset.transaction.view` · `asset.transaction.approve` · `asset.depreciation.view` · `asset.inventory.view` · `asset.inventory.approve` · `asset.report.view` · `print.render.view` · `print.render.export` · `utility.view`
+
+### Duyệt — TB.KHTH (`KHTB`)
+
+> Trưởng ban KHTB: duyệt hoặc trả lại phiếu đề nghị sửa hồ sơ bệnh án; duyệt & khoá bản chốt kỳ báo cáo khoa
+
+`dashboard.view` · `dashboard.view-all` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.view-all` · `hsba.request.sign-khtb` · `hsba.request.return` · `hsba.request.comment` · `hsba.request.export` · `hsba.request.print` · `report.view.view` · `report.view.all-departments` · `report.summary.view` · `report.export.excel` · `report.export.word` · `report.export.pdf` · `report.snapshot.approve` · `report.snapshot.lock` · `print.render.view` · `print.render.export` · `utility.view`
+
+### Tài chính (huỷ thanh toán) (`TAI_CHINH`)
+
+> Xác nhận đã huỷ thanh toán BHYT cho hồ sơ bệnh án trước khi sửa; xem báo cáo công tác
+
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.view-all` · `hsba.request.sign-finance` · `hsba.request.return` · `hsba.request.comment` · `hsba.request.export` · `hsba.request.print` · `report.view.view` · `report.export.excel` · `utility.view`
+
+### Quản lý tài sản (`QL_TAI_SAN`)
+
+> Phòng HC-QT / Vật tư — TBYT: toàn bộ nghiệp vụ tài sản toàn viện (hồ sơ, danh mục, chứng từ, khấu hao, kiểm kê, in tem)
+
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `asset.view` · `asset.view-all` · `asset.create` · `asset.update` · `asset.delete` · `asset.import` · `asset.export` · `asset.dashboard` · `asset.label.print` · `asset.catalog.view` · `asset.catalog.manage` · `asset.transaction.view` · `asset.transaction.create` · `asset.transaction.approve` · `asset.depreciation.view` · `asset.depreciation.run` · `asset.inventory.view` · `asset.inventory.manage` · `asset.inventory.scan` · `asset.inventory.approve` · `asset.report.view` · `print.render.view` · `print.render.export` · `utility.view` · `file.upload`
+
+### Trưởng khoa (`TRUONG_KHOA`)
+
+> Nhập & chịu trách nhiệm số liệu báo cáo của khoa; xem tài sản của khoa, lập đề nghị chứng từ, tham gia kiểm kê tại khoa
+
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `report.entry.view` · `report.entry.update` · `report.entry.import` · `report.entry.view-audit` · `report.view.view` · `report.export.excel` · `report.export.word` · `report.export.pdf` · `report.snapshot.create` · `print.render.view` · `print.render.export` · `hsba.request.view` · `hsba.request.sign-requester` · `asset.view` · `asset.dashboard` · `asset.transaction.view` · `asset.transaction.create` · `asset.catalog.view` · `asset.inventory.view` · `asset.inventory.scan` · `asset.report.view` · `utility.view` · `file.upload`
+
+### Người đề nghị sửa HSBA (`NHAP_LIEU`)
+
+> Bác sĩ / điều dưỡng: tạo phiếu đề nghị sửa hồ sơ bệnh án và ký với tư cách người đề nghị
+
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.create` · `hsba.request.update` · `hsba.request.sign-requester` · `hsba.request.comment` · `hsba.request.print` · `file.upload` · `utility.view`
+
+### Nhân viên thống kê nhập báo cáo (`NHAP_BAO_CAO`)
+
+> Chỉ nhập số liệu báo cáo công tác của khoa được gán
+
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `report.entry.view` · `report.entry.update` · `report.view.view` · `report.export.excel` · `utility.view`
+
+### Xem báo cáo (`XEM_BAO_CAO`)
+
+> Chỉ xem và kết xuất báo cáo của khoa được gán, không sửa số liệu
+
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `report.view.view` · `report.export.excel` · `report.export.pdf` · `utility.view`
+
+
+
+## 5. Quyền theo khoa (DEPT)
+
+- Người dùng có vai trò `DEPT` (Trưởng khoa, Nhân viên thống kê, Xem báo cáo…) chỉ thấy dữ liệu của khoa được gán.
+- Gán khoa tại *Quản trị → Người dùng → nút biểu tượng toà nhà*.
+- Trường hợp chưa gán khoa nào: hệ thống mặc định áp dụng **khoa công tác** của người đó.
+
+## 6. Thao tác thường dùng
+
+### Thêm vai trò mới cho một nhóm người (khuyến nghị: nhân bản rồi chỉnh)
+1. *Quản trị → Vai trò* → chọn vai trò gần giống nhất → **Nhân bản** → đặt mã mới.
+2. Bật/tắt quyền theo nhóm chức năng; hệ thống cảnh báo đỏ khi bạn sắp cấp **quyền nhạy cảm**
+   (quản trị người dùng, vai trò, cấu hình, sao lưu, nhật ký).
+3. Chọn **phạm vi dữ liệu**, màu nhận diện, thứ tự ưu tiên → Lưu.
+4. *Quản trị → Người dùng* → gán vai trò cho người cần; nếu vai trò `DEPT` thì gán thêm phạm vi khoa.
+
+### Kiểm tra "người này đang được làm gì"
+*Quản trị → Người dùng → nút con MẮT* — mở bảng **Quyền hiệu lực**: hợp nhất quyền từ tất cả vai trò,
+phạm vi dữ liệu thực tế, danh sách khoa, và với từng quyền biết rõ **đến từ vai trò nào**.
+
+### Đồng bộ vai trò hệ thống sau khi nâng cấp phiên bản
+Khi bản seed mới thay đổi ma trận chuẩn (thêm vai trò `LANH_DAO`, rà soát lại quyền `ADMIN`…),
+máy chủ đang chạy **không tự đổi** dữ liệu hiện có. Chạy:
 
 ```bash
-# Đăng nhập rồi xem quyền của chính mình
-curl -s -X POST http://localhost:4000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"Admin@123"}' | jq ".data.permissions | length"
+cd backend
+npx tsx scripts/sync-system-roles.ts            # xem trước thay đổi
+npx tsx scripts/sync-system-roles.ts --apply    # áp dụng
 ```
+
+Script chỉ đụng vào **vai trò hệ thống**; vai trò do đơn vị tự tạo giữ nguyên. Mọi quyền sắp bị gỡ
+đều được in ra để kiểm soát trước khi xác nhận.
+
+## 7. Tái sinh mục 3–4 khi seed thay đổi
+
+```bash
+cd backend && npx tsx -e " /* xem state.md §5 hoặc lịch sử git để lấy lệnh sinh */ "
+```
+

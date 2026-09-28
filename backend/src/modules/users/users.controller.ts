@@ -52,6 +52,13 @@ export class UsersController {
     return this.service.stats();
   }
 
+  @Get(':id/effective-permissions')
+  @RequirePermissions('user.view')
+  @ApiOperation({ summary: 'Quyền hiệu lực của một người dùng (gộp từ vai trò + phạm vi + khoa)' })
+  effectivePermissions(@Param('id', ParseIntPipe) id: number) {
+    return this.service.effectivePermissions(id);
+  }
+
   @Get(':id')
   @RequirePermissions('user.view')
   @ApiOperation({ summary: 'Chi tiết người dùng (vai trò, phạm vi khoa, lịch sử đăng nhập)' })
@@ -63,16 +70,20 @@ export class UsersController {
   @RequirePermissions('user.create')
   @Audit({ module: 'ADMIN', action: 'CREATE', entity: 'user', description: 'Thêm người dùng' })
   @ApiOperation({ summary: 'Thêm người dùng mới' })
-  create(@Body() dto: CreateUserDto) {
-    return this.service.create(dto);
+  create(@Body() dto: CreateUserDto, @CurrentUser() actor: AccessContext) {
+    return this.service.create(dto, actor);
   }
 
   @Put(':id')
   @RequirePermissions('user.update')
   @Audit({ module: 'ADMIN', action: 'UPDATE', entity: 'user', description: 'Sửa người dùng' })
   @ApiOperation({ summary: 'Cập nhật người dùng' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto) {
-    return this.service.update(id, dto);
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() actor: AccessContext,
+  ) {
+    return this.service.update(id, dto, actor);
   }
 
   @Delete(':id')
@@ -94,16 +105,24 @@ export class UsersController {
   @RequirePermissions('user.update')
   @Audit({ module: 'ADMIN', action: 'UPDATE', entity: 'user', description: 'Bật/tắt tài khoản' })
   @ApiOperation({ summary: 'Kích hoạt / vô hiệu hoá tài khoản' })
-  toggleActive(@Param('id', ParseIntPipe) id: number, @Body('active') active: boolean) {
-    return this.service.toggleActive(id, !!active);
+  toggleActive(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('active') active: boolean,
+    @CurrentUser() actor: AccessContext,
+  ) {
+    return this.service.toggleActive(id, !!active, actor);
   }
 
   @Post(':id/reset-password')
   @RequirePermissions('user.reset-password')
   @Audit({ module: 'ADMIN', action: 'UPDATE', entity: 'user', description: 'Đặt lại mật khẩu' })
   @ApiOperation({ summary: 'Đặt lại mật khẩu cho người dùng' })
-  resetPassword(@Param('id', ParseIntPipe) id: number, @Body() dto: ResetPasswordDto) {
-    return this.service.resetPassword(id, dto);
+  resetPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ResetPasswordDto,
+    @CurrentUser() actor: AccessContext,
+  ) {
+    return this.service.resetPassword(id, dto, actor);
   }
 
   @Post(':id/unlock')
@@ -117,8 +136,12 @@ export class UsersController {
   @RequirePermissions('user.assign-role')
   @Audit({ module: 'ADMIN', action: 'UPDATE', entity: 'user', description: 'Gán vai trò' })
   @ApiOperation({ summary: 'Gán vai trò cho người dùng' })
-  setRoles(@Param('id', ParseIntPipe) id: number, @Body() dto: SetRolesDto) {
-    return this.service.setRoles(id, dto);
+  setRoles(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetRolesDto,
+    @CurrentUser() actor: AccessContext,
+  ) {
+    return this.service.setRoles(id, dto, actor);
   }
 
   @Put(':id/department-scopes')

@@ -1,37 +1,48 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileUp, KeyRound, Lock, LockOpen, ShieldCheck, UserPlus } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Building2,
+  Crown,
+  Eye,
+  FileUp,
+  KeyRound,
+  Lock,
+  LockOpen,
+  ShieldAlert,
+  ShieldCheck,
+  UserPlus,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { CrudTable, type CrudField } from '@/components/shared/crud-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { UserImportDialog } from '@/components/users/user-import-dialog';
-import { Badge } from '@/components/ui/card';
+import { Badge, Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatDateTime } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
+
+const SUPER_ADMIN_ROLE = 'SUPER_ADMIN';
 
 /**
  * Chuẩn hoá danh sách vai trò của một người dùng.
  * API `/users` trả mảng `{ name, code, color }`; vẫn nhận dạng chuỗi cũ `tên|mã|màu;;…`.
- * (Trước đây trang chỉ hiểu dạng chuỗi nên người dùng đã có vai trò bị gửi mã rỗng
- * → "Vai trò không tồn tại" và các ô tích không được đánh dấu.)
  */
-function parseUserRoles(value: unknown): { name: string; code: string }[] {
+function parseUserRoles(value: unknown): { name: string; code: string; color?: string }[] {
   if (Array.isArray(value)) {
     return value
-      .map((r) => (typeof r === 'string' ? { name: r, code: r } : { name: String(r?.name ?? r?.code ?? ''), code: String(r?.code ?? '') }))
+      .map((r) => (typeof r === 'string' ? { name: r, code: r } : { name: String(r?.name ?? r?.code ?? ''), code: String(r?.code ?? ''), color: r?.color ? String(r.color) : undefined }))
       .filter((r) => r.code);
   }
   if (typeof value === 'string' && value) {
     return value
       .split(';;')
       .map((part) => {
-        const [name = '', code = ''] = part.split('|');
-        return { name: name || code, code };
+        const [name = '', code = '', color = ''] = part.split('|');
+        return { name: name || code, code, color: color || undefined };
       })
       .filter((r) => r.code);
   }
@@ -44,6 +55,7 @@ interface RoleOption {
   name: string;
   color: string;
   dataScope: 'OWN' | 'DEPT' | 'ALL';
+  description?: string;
   active: boolean;
 }
 
@@ -54,13 +66,76 @@ interface DeptOption {
   level: number;
 }
 
-/** Quản trị người dùng: CRUD, gán vai trò, khoá/mở khoá, đặt lại mật khẩu. */
+interface EffectivePermissions {
+  user: { id: number; username: string; fullName: string };
+  isSuperAdmin: boolean;
+  roles: { code: string; name: string; color?: string; dataScope: string }[];
+  dataScope: string;
+  departmentIds: number[];
+  permissions: { code: string; name: string; module: string; fromRoles?: string[] }[];
+  permissionCount: number;
+}
+
+const SCOPE_LABEL: Record<string, string> = {
+  ALL: 'Toàn viện',
+  DEPT: 'Theo khoa',
+  OWN: 'Cá nhân',
+};
+
+const MODULE_LABEL: Record<string, string> = {
+  dashboard: 'Tổng quan',
+  department: 'Khoa — phòng ban',
+  'hsba.request': 'HSBA — đề xuất sửa',
+  'hsba.workflow': 'HSBA — luồng ký duyệt',
+  'report.view': 'Báo cáo — xem',
+  'report.entry': 'Báo cáo — nhập liệu',
+  'report.snapshot': 'Báo cáo — chốt kỳ',
+  'report.summary': 'Báo cáo — tổng hợp',
+  'report.template': 'Báo cáo — mẫu biểu',
+  'report.export': 'Báo cáo — xuất dữ liệu',
+  asset: 'Tài sản',
+  'asset.catalog': 'Tài sản — danh mục',
+  'asset.transaction': 'Tài sản — phiếu biến động',
+  'asset.depreciation': 'Tài sản — hao mòn / khấu hao',
+  'asset.inventory': 'Tài sản — kiểm kê',
+  'asset.report': 'Tài sản — báo cáo',
+  'asset.label': 'Tài sản — in tem nhãn',
+  'print.template': 'In ấn — mẫu in',
+  'print.render': 'In ấn — in/sử dụng mẫu',
+  'studio.report': 'Studio — báo cáo động',
+  'studio.dashboard': 'Studio — dashboard động',
+  user: 'Ngườii dùng',
+  role: 'Vai trò & phân quyền',
+  'audit.log': 'Nhật ký hệ thống',
+  setting: 'Cấu hình hệ thống',
+  backup: 'Sao lưu — phục hồi',
+  job: 'Tác vụ định kỳ',
+  utility: 'Tiện ích',
+  file: 'Tệp đính kèm',
+  data: 'Dữ liệu — nhập/xuất',
+};
+
+function RoleDot({ color }: { color?: string }) {
+  return (
+    <span
+      className="inline-block size-2 shrink-0 rounded-full align-middle"
+      style={{ background: color || '#94A3B8' }}
+    />
+  );
+}
+
+/** Quản trị người dùng: CRUD, gán vai trò, phạm vi khoa, khoá/mở khoá, đặt lại mật khẩu, xem quyền hiệu lực. */
 export default function UsersPage() {
   const can = useAuth((s) => s.can);
+  const me = useAuth((s) => s.user);
   const queryClient = useQueryClient();
 
   const [roleTarget, setRoleTarget] = useState<Record<string, unknown> | null>(null);
   const [roleCodes, setRoleCodes] = useState<string[]>([]);
+  const [scopeTarget, setScopeTarget] = useState<Record<string, unknown> | null>(null);
+  const [scopeDeptIds, setScopeDeptIds] = useState<number[]>([]);
+  const [permsTarget, setPermsTarget] = useState<Record<string, unknown> | null>(null);
+  const [permKeyword, setPermKeyword] = useState('');
   const [resetTarget, setResetTarget] = useState<Record<string, unknown> | null>(null);
   const [unlockTarget, setUnlockTarget] = useState<Record<string, unknown> | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
@@ -76,10 +151,28 @@ export default function UsersPage() {
     queryFn: () => apiFetch<DeptOption[]>('/departments/options'),
   });
 
+  const effective = useQuery({
+    queryKey: ['user-effective-perms', permsTarget?.id],
+    enabled: !!permsTarget,
+    queryFn: () => apiFetch<EffectivePermissions>(`/users/${permsTarget?.id}/effective-permissions`),
+  });
+
+  const userDetail = useQuery({
+    queryKey: ['user-detail-scopes', scopeTarget?.id],
+    enabled: !!scopeTarget,
+    queryFn: () =>
+      apiFetch<{ departmentScopes: { id: number; code: string; name: string }[] }>(`/users/${scopeTarget?.id}`),
+  });
+
+  useEffect(() => {
+    if (userDetail.data && scopeTarget) {
+      setScopeDeptIds((userDetail.data.departmentScopes ?? []).map((d) => d.id));
+    }
+  }, [userDetail.data, scopeTarget]);
+
   const { data: jobTitles } = useQuery({
     queryKey: ['job-titles-options'],
     queryFn: () => apiFetch<{ id: number; code: string; name: string }[]>('/job-titles/options'),
-    // Luôn lấy mới khi mở trang — danh mục có thể vừa được sửa ở trang Chức danh
     staleTime: 0,
     refetchOnMount: 'always',
   });
@@ -114,6 +207,18 @@ export default function UsersPage() {
     onError: (err) => toast.error((err as Error).message),
   });
 
+  const setScopes = useMutation({
+    mutationFn: (payload: { id: number; departmentIds: number[] }) =>
+      apiFetch(`/users/${payload.id}/department-scopes`, { method: 'PUT', body: { departmentIds: payload.departmentIds } }),
+    onSuccess: async () => {
+      toast.success('Đã cập nhật phạm vi khoa');
+      setScopeTarget(null);
+      await queryClient.invalidateQueries({ queryKey: ['/users'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-effective-perms'] });
+    },
+    onError: (err) => toast.error((err as Error).message),
+  });
+
   const resetPassword = useMutation({
     mutationFn: (id: number) => apiFetch<{ temporaryPassword?: string }>(`/users/${id}/reset-password`, { method: 'POST', body: {} }),
     onSuccess: async (res) => {
@@ -134,6 +239,30 @@ export default function UsersPage() {
     },
     onError: (err) => toast.error((err as Error).message),
   });
+
+  /** Những vai trò cấp cao đang được chọn — hiển thị cảnh báo trong dialog gán vai trò. */
+  const highPrivilegePicked = useMemo(
+    () => roleCodes.filter((c) => c === SUPER_ADMIN_ROLE || c === 'ADMIN' || c === 'LANH_DAO'),
+    [roleCodes],
+  );
+
+  /** Nhóm quyền hiệu lực theo module để hiển thị */
+  const permsByModule = useMemo(() => {
+    const map = new Map<string, EffectivePermissions['permissions']>();
+    const kw = permKeyword.trim().toLowerCase();
+    for (const p of effective.data?.permissions ?? []) {
+      if (kw && !`${p.name} ${p.code}`.toLowerCase().includes(kw)) continue;
+      const list = map.get(p.module) ?? [];
+      list.push(p);
+      map.set(p.module, list);
+    }
+    return [...map.entries()].sort((a, b) => (MODULE_LABEL[a[0]] ?? a[0]).localeCompare(MODULE_LABEL[b[0]] ?? b[0]));
+  }, [effective.data, permKeyword]);
+
+  const scopeDeptNames = useMemo(() => {
+    const dict = new Map((departments ?? []).map((d) => [d.id, d.name]));
+    return (effective.data?.departmentIds ?? []).map((id) => dict.get(id) ?? `#${id}`);
+  }, [departments, effective.data]);
 
   return (
     <>
@@ -179,13 +308,15 @@ export default function UsersPage() {
               if (!list.length) return <span className="text-[var(--muted-foreground)]">Chưa gán</span>;
               return (
                 <div className="flex flex-wrap gap-1">
-                  {list.map(({ name, code }) => {
-                    return (
+                  {list.map(({ name, code, color }) => (
                       <Badge key={code} tone="muted">
-                        <span title={code}>{name}</span>
+                        <span className="inline-flex items-center gap-1" title={code}>
+                          <RoleDot color={color} />
+                          {name}
+                          {code === SUPER_ADMIN_ROLE ? <Crown className="size-3 text-amber-500" /> : null}
+                        </span>
                       </Badge>
-                    );
-                  })}
+                  ))}
                 </div>
               );
             },
@@ -207,6 +338,11 @@ export default function UsersPage() {
         ]}
         rowActions={(row) => (
           <>
+            {can('user.view') ? (
+              <Button variant="ghost" size="icon" title="Xem quyền hiệu lực" onClick={() => { setPermKeyword(''); setPermsTarget(row); }}>
+                <Eye />
+              </Button>
+            ) : null}
             {can('user.assign-role') ? (
               <Button
                 variant="ghost"
@@ -218,6 +354,11 @@ export default function UsersPage() {
                 }}
               >
                 <ShieldCheck />
+              </Button>
+            ) : null}
+            {can('user.update') ? (
+              <Button variant="ghost" size="icon" title="Phạm vi khoa được xem" onClick={() => setScopeTarget(row)}>
+                <Building2 />
               </Button>
             ) : null}
             {can('user.reset-password') ? (
@@ -239,7 +380,7 @@ export default function UsersPage() {
         open={!!roleTarget}
         onClose={() => setRoleTarget(null)}
         title={`Gán vai trò: ${String(roleTarget?.fullName ?? '')}`}
-        description="Vai trò quyết định tập quyền và phạm vi số liệu được xem"
+        description="Vai trò quyết định tập quyền và phạm vi số liệu được xem. Người dùng nhận HỢP NHẤT quyền của mọi vai trò được gán và phạm vi RỘNG NHẤT."
         footer={
           <>
             <Button variant="outline" onClick={() => setRoleTarget(null)}>
@@ -255,34 +396,196 @@ export default function UsersPage() {
         }
       >
         <div className="space-y-2">
+          {highPrivilegePicked.length > 0 ? (
+            <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-950/60 dark:text-amber-200">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0" />
+              <div>
+                Đang chọn vai trò cấp cao: <b>{highPrivilegePicked.join(', ')}</b>. Chỉ gán cho tài khoản thật sự cần
+                quyền hệ thống; hãy chắc chắn tài khoản là chính chủ và đã dùng mật khẩu mạnh.
+              </div>
+            </div>
+          ) : null}
           {(roles ?? []).map((role) => {
             const checked = roleCodes.includes(role.code);
+            const disabled = role.code === SUPER_ADMIN_ROLE && !me?.isSuperAdmin;
             return (
               <label
                 key={role.code}
-                className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-[var(--muted)]"
+                className={cn(
+                  'flex items-start gap-3 rounded-lg border p-3 hover:bg-[var(--muted)]',
+                  disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+                )}
               >
                 <input
                   type="checkbox"
                   className="mt-1"
                   checked={checked}
+                  disabled={disabled}
                   onChange={(e) =>
                     setRoleCodes((prev) => (e.target.checked ? [...prev, role.code] : prev.filter((c) => c !== role.code)))
                   }
                 />
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-sm font-medium">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    <RoleDot color={role.color} />
                     {role.name}
+                    {role.code === SUPER_ADMIN_ROLE ? <Crown className="size-3.5 text-amber-500" /> : null}
                     <span className="font-mono text-[10px] text-[var(--muted-foreground)]">{role.code}</span>
+                    {disabled ? <Badge tone="muted">Chỉ Quản trị tối cao</Badge> : null}
                   </div>
                   <div className="text-[11px] text-[var(--muted-foreground)]">
-                    Phạm vi: {role.dataScope === 'ALL' ? 'Toàn viện' : role.dataScope === 'DEPT' ? 'Theo khoa' : 'Cá nhân'}
+                    Phạm vi: {SCOPE_LABEL[role.dataScope]}
+                    {role.description ? ` · ${role.description}` : ''}
                   </div>
                 </div>
               </label>
             );
           })}
         </div>
+      </Dialog>
+
+      {/* Phạm vi khoa được xem */}
+      <Dialog
+        open={!!scopeTarget}
+        onClose={() => setScopeTarget(null)}
+        title={`Phạm vi khoa: ${String(scopeTarget?.fullName ?? '')}`}
+        description="Áp dụng khi vai trò có phạm vi Theo khoa — người dùng chỉ thấy số liệu của các khoa được tick. Để trống = theo khoa công tác."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setScopeTarget(null)}>
+              Huỷ
+            </Button>
+            <Button
+              loading={setScopes.isPending}
+              disabled={userDetail.isLoading}
+              onClick={() => scopeTarget && setScopes.mutate({ id: Number(scopeTarget.id), departmentIds: scopeDeptIds })}
+            >
+              Lưu phạm vi
+            </Button>
+          </>
+        }
+      >
+        <div className="max-h-[50vh] space-y-1 overflow-y-auto">
+          {(departments ?? []).map((d) => {
+            const checked = scopeDeptIds.includes(d.id);
+            return (
+              <label key={d.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-[var(--muted)]">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) =>
+                    setScopeDeptIds((prev) => (e.target.checked ? [...prev, d.id] : prev.filter((x) => x !== d.id)))
+                  }
+                />
+                <span style={{ paddingLeft: `${Math.max(0, d.level - 1) * 14}px` }}>{d.name}</span>
+              </label>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[11px] text-[var(--muted-foreground)]">
+          <span>{scopeDeptIds.length > 0 ? `Đã chọn ${scopeDeptIds.length} khoa` : 'Chưa chọn khoa nào'}</span>
+          <button type="button" className="text-[var(--primary)] hover:underline" onClick={() => setScopeDeptIds([])}>
+            Xoá hết lựa chọn
+          </button>
+        </div>
+      </Dialog>
+
+      {/* Quyền hiệu lực */}
+      <Dialog
+        open={!!permsTarget}
+        onClose={() => setPermsTarget(null)}
+        title={`Quyền hiệu lực: ${String(effective.data?.user.fullName ?? permsTarget?.fullName ?? '')}`}
+        size="lg"
+        footer={<Button variant="outline" onClick={() => setPermsTarget(null)}>Đóng</Button>}
+      >
+        {effective.isLoading ? (
+          <div className="p-4 text-sm text-[var(--muted-foreground)]">Đang tải…</div>
+        ) : effective.data ? (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card className="p-3">
+                <div className="text-[11px] uppercase text-[var(--muted-foreground)]">Vai trò</div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {effective.data.isSuperAdmin ? (
+                    <Badge tone="danger">
+                      <Crown className="mr-1 size-3" /> {SUPER_ADMIN_ROLE}
+                    </Badge>
+                  ) : effective.data.roles.length === 0 ? (
+                    <span className="text-xs text-[var(--muted-foreground)]">Chưa gán</span>
+                  ) : (
+                    effective.data.roles.map((r) => (
+                      <Badge key={r.code} tone="muted">
+                        <span className="inline-flex items-center gap-1">
+                          <RoleDot color={r.color} /> {r.name}
+                        </span>
+                      </Badge>
+                    ))
+                  )}
+                </div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-[11px] uppercase text-[var(--muted-foreground)]">Phạm vi dữ liệu</div>
+                <div className="mt-1 text-sm font-medium">{SCOPE_LABEL[effective.data.dataScope] ?? effective.data.dataScope}</div>
+                {effective.data.dataScope === 'DEPT' ? (
+                  <div className="mt-1 text-[11px] text-[var(--muted-foreground)]">
+                    {scopeDeptNames.length > 0 ? scopeDeptNames.join(' · ') : 'Theo khoa công tác (chưa gán khoa cụ thể)'}
+                  </div>
+                ) : null}
+              </Card>
+              <Card className="p-3">
+                <div className="text-[11px] uppercase text-[var(--muted-foreground)]">Tổng quyền</div>
+                <div className="mt-1 text-2xl font-bold text-[var(--primary)]">
+                  {effective.data.isSuperAdmin ? 'Mọi quyền' : effective.data.permissionCount}
+                </div>
+              </Card>
+            </div>
+
+            {effective.data.isSuperAdmin ? (
+              <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/60 dark:text-amber-200">
+                <Crown className="mr-1.5 inline size-4 align-text-bottom" />
+                Quản trị tối cao luôn được <b>mọi quyền</b> trong hệ thống, kể cả quyền mới thêm về sau.
+              </div>
+            ) : (
+              <>
+                <input
+                  className="w-full rounded-lg border border-[var(--border)] bg-transparent px-3 py-2 text-sm outline-none focus:border-[var(--primary)]"
+                  placeholder="Tìm nhanh quyền…"
+                  value={permKeyword}
+                  onChange={(e) => setPermKeyword(e.target.value)}
+                />
+                <div className="max-h-[46vh] space-y-3 overflow-y-auto pr-1">
+                  {permsByModule.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-[var(--muted-foreground)]">
+                      Không có quyền phù hợp.
+                    </div>
+                  ) : (
+                    permsByModule.map(([module, list]) => (
+                      <div key={module} className="overflow-hidden rounded-xl border">
+                        <div className="border-b bg-[var(--muted)]/50 px-3 py-1.5 text-xs font-semibold">
+                          {MODULE_LABEL[module] ?? module}
+                          <span className="ml-2 font-normal text-[var(--muted-foreground)]">{list.length} quyền</span>
+                        </div>
+                        <div className="grid gap-x-4 gap-y-1 p-3 sm:grid-cols-2">
+                          {list.map((p) => (
+                            <div key={p.code} className="min-w-0 text-sm">
+                              <span className="block truncate">{p.name}</span>
+                              <span className="block text-[10px] text-[var(--muted-foreground)]">
+                                <span className="font-mono">{p.code}</span>
+                                {p.fromRoles?.length ? <span> ← {p.fromRoles.join(', ')}</span> : null}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 text-sm text-[var(--muted-foreground)]">Không tải được dữ liệu.</div>
+        )}
       </Dialog>
 
       <ConfirmDialog

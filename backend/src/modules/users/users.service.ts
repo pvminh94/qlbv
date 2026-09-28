@@ -15,6 +15,8 @@ import { DbService } from '../../db/db.service';
 import {
   departments,
   loginLogs,
+  permissions,
+  rolePermissions,
   roles,
   userDepartmentScopes,
   userRoles,
@@ -204,7 +206,11 @@ export class UsersService {
     return rows.map((r) => r.id);
   }
 
-  async create(dto: CreateUserDto) {
+  async create(dto: CreateUserDto, actor: AccessContext) {
+    // Chặn leo thang: người tạo tài khoản có vai SUPER_ADMIN chỉ khi chính họ là SUPER_ADMIN
+    if (!actor.isSuperAdmin && dto.roleCodes?.includes(SUPER_ADMIN_ROLE)) {
+      throw new ForbiddenException('Chỉ Quản trị tối cao mới tạo được tài khoản có vai trò Quản trị tối cao');
+    }
     const username = dto.username.trim().toLowerCase();
     const dup = await this.db.db
       .select({ id: users.id })
@@ -250,7 +256,9 @@ export class UsersService {
     return { ...(await this.findOne(created.id)), initialPassword: dto.password ? undefined : password };
   }
 
-  async update(id: number, dto: UpdateUserDto) {
+  async update(id: number, dto: UpdateUserDto, actor: AccessContext) {
+    // Tài khoản có vai SUPER_ADMIN (kể cả admin gốc) chỉ SUPER_ADMIN khác mới được sửa
+    await this.assertCanTouchTarget(id, actor);
     const current = await this.findOne(id);
 
     if (dto.username && dto.username.toLowerCase() !== current.username) {
@@ -288,6 +296,19 @@ export class UsersService {
   }
 
   /** Xoá mềm — giữ lại lịch sử thao tác của người dùng */
+
+  /** Chặn can thiệp vào tài khoản Quản trị tối cao trừ khi người thao tác cũng là tối cao */
+  private async assertCanTouchTarget(id: number, actor?: AccessContext): Promise<void> {
+    const targetRoles = await this.db.db
+      .select({ code: roles.code })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, id));
+    const targetisSuper = targetRoles.some((r) => r.code === SUPER_ADMIN_ROLE);
+    if (targetisSuper && !(actor?.isSuperAdmin)) {
+      throw new ForbiddenException('Chỉ Quản trị tối cao mới được thao tác trên tài khoản Quản trị tối cao');
+    }
+  }
   async remove(id: number, actor?: AccessContext) {
     const user = await this.findOne(id);
     if (user.username === config.seed.adminUser) {
@@ -296,6 +317,7 @@ export class UsersService {
     if (actor && actor.id === id) {
       throw new BadRequestException('Không thể tự xoá tài khoản đang đăng nhập');
     }
+    await this.assertCanTouchTarget(id, actor);
     await this.db.db
       .update(users)
       .set({ active: false, deletedAt: new Date(), updatedAt: new Date() })
@@ -314,7 +336,19 @@ export class UsersService {
     return this.findOne(id);
   }
 
-  async toggleActive(id: number, active: boolean) {
+  async toggleActive(id: number, active: boolean, actor?: AccessContext) {
+    const [u] = await this.db.db
+      .select({ username: users.username })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    if (!active && u?.username === config.seed.adminUser) {
+      throw new ForbiddenException('Không thể vô hiệu hoá tài khoản quản trị gốc');
+    }
+    if (!active && actor && actor.id === id) {
+      throw new BadRequestException('Không thể tự vô hiệu hoá tài khoản đang đăng nhập');
+    }
+    if (!active) await this.assertCanTouchTarget(id, actor);
     await this.db.db
       .update(users)
       .set({ active, updatedAt: new Date() })
@@ -325,7 +359,11 @@ export class UsersService {
   }
 
   /** Đặt lại mật khẩu (quản trị thực hiện) */
-  async resetPassword(id: number, dto: ResetPasswordDto) {
+  async resetPassword(id: number, dto: ResetPasswordDto, actor?: AccessContext) {
+    if (actor && actor.id === id) {
+      throw new BadRequestException('Hãy đổi mật khẩu của chính mình ở trang Tài khoản');
+    }
+    await this.assertCanTouchTarget(id, actor);
     const newPassword = dto.newPassword ?? DEFAULT_RESET_PASSWORD;
     await this.db.db
       .update(users)
@@ -352,9 +390,20 @@ export class UsersService {
     return { message: 'Đã mở khoá tài khoản' };
   }
 
-  async setRoles(id: number, dto: SetRolesDto) {
+  async setRoles(id: number, dto: SetRolesDto, actor?: AccessContext) {
     await this.findOne(id);
+    await this.assertCanTouchTarget(id, actor);
     const ids = await this.resolveRoleIds(dto.roleCodes);
+
+    // Chỉ Quản trị tối cao mới được GÁN vai trò Quản trị tối cao cho ai
+    const [superRoleRow] = await this.db.db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.code, SUPER_ADMIN_ROLE))
+      .limit(1);
+    if (superRoleRow && ids.includes(superRoleRow.id) && !actor?.isSuperAdmin) {
+      throw new ForbiddenException('Chỉ Quản trị tối cao mới được gán vai trò Quản trị tối cao');
+    }
 
     // Bảo vệ: không cho gỡ vai trò quản trị tối cao khỏi người dùng cuối cùng
     const [superRole] = await this.db.db
@@ -396,6 +445,65 @@ export class UsersService {
     return this.findOne(id);
   }
 
+  /**
+   * Quyền hiệu lực của một người dùng: hợp nhất quyền từ mọi vai trò + phạm vi dữ liệu
+   * + danh sách khoa được phép — dùng cho màn hình xem nhanh "người này được làm gì".
+   */
+  async effectivePermissions(id: number) {
+    const [u] = await this.db.db
+      .select({ id: users.id, username: users.username, fullName: users.fullName })
+      .from(users)
+      .where(and(eq(users.id, id), isNull(users.deletedAt)))
+      .limit(1);
+    if (!u) throw new NotFoundException('Không tìm thấy người dùng');
+    const ctx = await this.auth.buildSystemContext(id, 'effective-view');
+    const roleList = await this.db.db
+      .select({
+        code: roles.code,
+        name: roles.name,
+        color: roles.color,
+        dataScope: roles.dataScope,
+      })
+      .from(userRoles)
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, id))
+      .orderBy(asc(roles.priority));
+    const permRows = await this.db.db
+      .select({ code: permissions.code, name: permissions.name, module: permissions.module })
+      .from(userRoles)
+      .innerJoin(rolePermissions, eq(rolePermissions.roleId, userRoles.roleId))
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .where(eq(userRoles.userId, id))
+      .orderBy(asc(permissions.module), asc(permissions.code));
+    // roles nào đóng góp quyền nào — để xem nguồn gốc từng quyền
+    const roleCodesByPerm = await this.db.db
+      .select({ permissionCode: permissions.code, roleCode: roles.code })
+      .from(userRoles)
+      .innerJoin(rolePermissions, eq(rolePermissions.roleId, userRoles.roleId))
+      .innerJoin(permissions, eq(permissions.id, rolePermissions.permissionId))
+      .innerJoin(roles, eq(roles.id, userRoles.roleId))
+      .where(eq(userRoles.userId, id));
+    const sourceOf = new Map<string, string[]>();
+    for (const r of roleCodesByPerm) {
+      const list = sourceOf.get(r.permissionCode) ?? [];
+      list.push(r.roleCode);
+      sourceOf.set(r.permissionCode, list);
+    }
+    const seen = new Set<string>();
+    const perms = permRows.filter((x) => (seen.has(x.code) ? false : (seen.add(x.code), true)));
+    return {
+      user: u,
+      isSuperAdmin: ctx?.isSuperAdmin ?? false,
+      roles: roleList,
+      dataScope: ctx?.dataScope ?? 'OWN',
+      departmentIds: ctx?.departmentIds ?? [],
+      permissions: ctx?.isSuperAdmin
+        ? [{ code: '*', name: 'Toàn bộ quyền (Quản trị tối cao)', module: '*' }]
+        : perms.map((x) => ({ ...x, fromRoles: sourceOf.get(x.code) ?? [] })),
+      permissionCount: ctx?.isSuperAdmin ? -1 : perms.length,
+    };
+  }
+
   async setDepartmentScopes(id: number, dto: SetDepartmentScopesDto) {
     await this.findOne(id);
     await this.db.transaction(async (tx) => {
@@ -422,7 +530,7 @@ export class UsersService {
       .select({ total: sql<number>`count(*)::int` })
       .from(users)
       .where(and(isNull(users.deletedAt), sql`${users.lockedUntil} > now()`));
-    const [neverLoggedIn] = await this.db.db
+    const [neverLoggedin] = await this.db.db
       .select({ total: sql<number>`count(*)::int` })
       .from(users)
       .where(and(isNull(users.deletedAt), isNull(users.lastLoginAt)));
@@ -438,7 +546,7 @@ export class UsersService {
       total: total?.total ?? 0,
       active: active?.total ?? 0,
       locked: locked?.total ?? 0,
-      neverLoggedIn: neverLoggedIn?.total ?? 0,
+      neverLoggedin: neverLoggedin?.total ?? 0,
       byDepartment,
     };
   }

@@ -96,7 +96,7 @@ theo đúng quyền/phạm vi của người đăng ký, dựng bằng query eng
 dựng file vào `storage.exportsDir/studio/`, lưu siêu dữ liệu ở
 `studio_subscription_files` rồi gửi thông báo thành công/thất bại; link thông
 báo mở lại đúng màn hình nguồn với hộp thoại Ấn bản tự bung
-(`/dashboard?an-ban=1`, `/bao-cao/tuy-bien/{id}?an-ban=1`). NgườI dùng quản lý
+(`/dashboard?an-ban=1`, `/bao-cao/tuy-bien/{id}?an-ban=1`). Người dùng quản lý
 đăng ký & tải ấn bản ở hộp thoại "Ấn bản" trên mọi trang Studio (nút luôn hiện
 cho người có quyền xem trang); giới hạn 10 đăng ký/người, download kiểm chủ sở
 hữu file.

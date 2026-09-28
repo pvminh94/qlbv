@@ -183,8 +183,24 @@ export class RolesService {
 
   async update(id: number, dto: UpdateRoleDto) {
     const role = await this.findOne(id);
+    if (role.code === SUPER_ADMIN_ROLE) {
+      // Vai trò tối cao bất biến về mặt an ninh: chỉ cho chỉnh mô tả/màu hiển thị
+      await this.db.db
+        .update(roles)
+        .set({
+          ...(dto.description !== undefined ? { description: dto.description } : {}),
+          ...(dto.color !== undefined ? { color: dto.color } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(roles.id, id));
+      await this.auth.invalidateUserCache();
+      return this.findOne(id);
+    }
     if (role.isSystem && dto.code && dto.code.toUpperCase() !== role.code) {
       throw new BadRequestException('Không thể đổi mã của vai trò hệ thống');
+    }
+    if (role.isSystem && dto.active === false) {
+      throw new BadRequestException('Không thể vô hiệu hoá vai trò hệ thống');
     }
     await this.db.db
       .update(roles)
@@ -208,7 +224,10 @@ export class RolesService {
 
   /** Gán lại toàn bộ tập quyền của vai trò */
   async setPermissions(roleId: number, permissionCodes: string[]) {
-    await this.findOne(roleId);
+    const role = await this.findOne(roleId);
+    if (role.code === SUPER_ADMIN_ROLE) {
+      throw new BadRequestException('Vai trò Quản trị tối cao mặc định toàn quyền — không thể điều chỉnh');
+    }
     const ids = await this.resolvePermissionIds(permissionCodes);
     await this.db.transaction(async (tx) => {
       await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, roleId));
@@ -225,6 +244,14 @@ export class RolesService {
 
   /** Thêm/bớt một quyền (dùng cho checkbox trên giao diện) */
   async togglePermission(roleId: number, permissionCode: string, granted: boolean) {
+    const [roleRow] = await this.db.db
+      .select({ code: roles.code })
+      .from(roles)
+      .where(eq(roles.id, roleId))
+      .limit(1);
+    if (roleRow?.code === SUPER_ADMIN_ROLE) {
+      throw new BadRequestException('Vai trò Quản trị tối cao mặc định toàn quyền — không thể điều chỉnh');
+    }
     const [perm] = await this.db.db
       .select({ id: permissions.id })
       .from(permissions)

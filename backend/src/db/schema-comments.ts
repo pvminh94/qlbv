@@ -542,7 +542,7 @@ export const COLUMN_COMMENTS: Record<string, Record<string, string>> = {
     _table: 'Đăng ký nhận ấn bản Excel định kỳ của trang Studio',
     id: 'Khoá chính',
     page_id: 'Trang Studio (FK studio_dashboards)',
-    user_id: 'NgườI nhận ấn bản (FK users) — dữ liệu render theo quyền người này',
+    user_id: 'Người nhận ấn bản (FK users) — dữ liệu render theo quyền người này',
     label: 'Tên gợi nhớ của đăng ký',
     frequency: 'Tần suất: DAILY (hằng ngày) | WEEKLY (thứ Hai) | MONTHLY (mùng 1)',
     hour_of_day: 'Giờ phát hành (giờ máy chủ, 0–23)',
