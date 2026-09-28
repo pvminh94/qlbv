@@ -19,8 +19,11 @@ import { AdvancedQueryDto } from '../../common/dto/query.dto';
 import type { AccessContext, ClientMeta } from '../../common/types/access-context';
 import {
   BulkSignDto,
+  CreateAttachmentDto,
+  CreateCommentDto,
   CreateRequestDto,
   CreateWorkflowDto,
+  DuplicatesQueryDto,
   RequestQueryDto,
   ReturnRequestDto,
   SignRequestDto,
@@ -109,6 +112,13 @@ export class HsbaRequestController {
     @Param('hash') hash: string,
   ) {
     return this.service.verify(id, stepKey, hash);
+  }
+
+  @Get('duplicates')
+  @RequirePermissions('hsba.request.view')
+  @ApiOperation({ summary: 'Tra cứu phiếu đang mở trùng mã KCB / mã thẻ BHYT (cảnh báo tạo trùng)' })
+  duplicates(@Query() query: DuplicatesQueryDto) {
+    return this.service.findOpenDuplicates(query);
   }
 
   @Get(':id')
@@ -223,6 +233,95 @@ export class HsbaRequestController {
     @ClientInfo() client: ClientMeta,
   ) {
     return this.service.cancel(id, body?.reason, user, client);
+  }
+
+  /* ------------------------------------------------------------------ BÌNH LUẬN */
+
+  @Get(':id/comments')
+  @RequirePermissions('hsba.request.view')
+  @ApiOperation({ summary: 'Danh sách trao đổi của phiếu' })
+  comments(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AccessContext) {
+    return this.service.listComments(id, user);
+  }
+
+  @Post(':id/comments')
+  @RequirePermissions('hsba.request.comment')
+  @Audit({ module: 'HSBA', action: 'COMMENT', entity: 'hsba_request', description: 'Trao đổi trên phiếu' })
+  @ApiOperation({ summary: 'Thêm trao đổi' })
+  addComment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCommentDto,
+    @CurrentUser() user: AccessContext,
+    @ClientInfo() client: ClientMeta,
+  ) {
+    return this.service.addComment(id, dto, user, client);
+  }
+
+  @Delete(':id/comments/:commentId')
+  @RequirePermissions('hsba.request.comment')
+  @Audit({ module: 'HSBA', action: 'COMMENT_DELETE', entity: 'hsba_request', description: 'Xoá trao đổi (mềm)' })
+  @ApiOperation({ summary: 'Xoá trao đổi (tác giả hoặc quản trị phiếu)' })
+  removeComment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+    @CurrentUser() user: AccessContext,
+  ) {
+    return this.service.removeComment(id, commentId, user);
+  }
+
+  /* -------------------------------------------------------------- TỆP ĐÍNH KÈM */
+
+  @Get(':id/attachments')
+  @RequirePermissions('hsba.request.view')
+  @ApiOperation({ summary: 'Danh sách tệp minh chứng của phiếu' })
+  attachments(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AccessContext) {
+    return this.service.listAttachments(id, user);
+  }
+
+  @Post(':id/attachments')
+  @RequirePermissions('file.upload')
+  @Audit({ module: 'HSBA', action: 'ATTACHMENT', entity: 'hsba_request', description: 'Đính kèm tệp minh chứng' })
+  @ApiOperation({ summary: 'Tải tệp minh chứng (base64, kiểm tra kiểu/kích thước/chữ ký tệp)' })
+  upload(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateAttachmentDto,
+    @CurrentUser() user: AccessContext,
+    @ClientInfo() client: ClientMeta,
+  ) {
+    return this.service.uploadAttachment(id, dto, user, client);
+  }
+
+  @Get(':id/attachments/:attachmentId')
+  @RequirePermissions('hsba.request.view')
+  @ApiOperation({ summary: 'Tải/xem tệp minh chứng (stream có kiểm tra quyền xem phiếu)' })
+  async downloadAttachment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('attachmentId', ParseIntPipe) attachmentId: number,
+    @CurrentUser() user: AccessContext,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { row, absPath } = await this.service.readAttachment(id, attachmentId, user);
+    res.set({
+      'Content-Type': row.mimeType,
+      'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(row.fileName)}`,
+      'Cache-Control': 'private, max-age=60',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    const { createReadStream } = await import('node:fs');
+    return new StreamableFile(createReadStream(absPath));
+  }
+
+  @Delete(':id/attachments/:attachmentId')
+  @RequirePermissions('file.upload')
+  @Audit({ module: 'HSBA', action: 'ATTACHMENT_DELETE', entity: 'hsba_request', description: 'Xoá tệp minh chứng' })
+  @ApiOperation({ summary: 'Xoá tệp minh chứng (ngườI đăng hoặc quản trị phiếu)' })
+  removeAttachment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('attachmentId', ParseIntPipe) attachmentId: number,
+    @CurrentUser() user: AccessContext,
+    @ClientInfo() client: ClientMeta,
+  ) {
+    return this.service.removeAttachment(id, attachmentId, user, client);
   }
 
   @Patch(':id/restore')

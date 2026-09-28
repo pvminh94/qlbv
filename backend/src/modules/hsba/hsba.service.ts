@@ -15,11 +15,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import {
   departments,
+  hsbaAttachments,
+  hsbaComments,
   hsbaLogs,
   hsbaRequests,
   hsbaSignatures,
@@ -36,9 +40,13 @@ import { CacheService } from '../../infra/cache/cache.service';
 import { QueueService } from '../../infra/queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { formatVN } from '../../common/utils/date.util';
+import { config } from '../../config/env';
 import type {
+  CreateAttachmentDto,
+  CreateCommentDto,
   CreateRequestDto,
   CreateWorkflowDto,
+  DuplicatesQueryDto,
   RequestQueryDto,
   UpdateRequestDto,
   UpdateWorkflowDto,
@@ -125,6 +133,29 @@ export function buildSearchText(row: {
       .join(' '),
   );
 }
+
+/** SLA hiển thị (giờ): quá mức này phiếu được gắn cờ QUÁ HẠN theo mức ưu tiên. */
+const OVERDUE_HOURS_BY_PRIORITY: Record<string, number> = {
+  URGENT: 8,
+  HIGH: 24,
+  NORMAL: 48,
+  LOW: 96,
+};
+
+/** Kiểu tệp đính kèm được chấp nhận — minh chứng HSBA thực tế chỉ cần nhóm này. */
+const ATTACHMENT_MIME: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+};
+
+/** Giới hạn một tệp (đã giải mã). Tổng kích thước thân request do cấu hình JSON kiểm soát. */
+const ATTACHMENT_MAX_BYTES = 12 * 1024 * 1024;
 
 @Injectable()
 export class HsbaService {
@@ -617,11 +648,32 @@ export class HsbaService {
       byRequest.set(s.requestId, list);
     }
 
-    const items = rows.map((r) => ({
-      ...r,
-      statusLabel: REQUEST_STATUS_LABELS[r.status as keyof typeof REQUEST_STATUS_LABELS] ?? r.status,
-      signatures: byRequest.get(r.id) ?? [],
-    }));
+    // Nạp đúng mỗi quy trình đang dùng trong trang để tính canSign cho từng dòng
+    // (điều này cho phép danh sách hiển thị ô KÝ NHANH và bulk-sign đúng với từng quy trình riêng).
+    const wfIds = [...new Set(rows.map((r) => r.workflowId).filter((x): x is number => typeof x === 'number'))];
+    const wfRows = wfIds.length
+      ? await this.db.db.select().from(hsbaWorkflows).where(inArray(hsbaWorkflows.id, wfIds))
+      : [];
+    const stepsByWf = new Map(wfRows.map((w) => [w.id, (w.steps ?? []) as WorkflowStep[]]));
+
+    const now = Date.now();
+    const items = rows.map((r) => {
+      const steps = r.workflowId ? stepsByWf.get(r.workflowId) : undefined;
+      const pending = steps?.[r.currentStep];
+      // Cột "Đang chờ" ở list ưu tiên tên bước của chính quy trình phiếu đang dùng —
+      // mới nhìn là biết phiếu đang ở tay ai, không phải mã kỹ thuật DE_NGHI/KHTB/TC.
+      const waitingName = pending?.name ?? (r as { pendingStepName?: string | null }).pendingStepName ?? null;
+      const waitingHours = Math.max(0, Math.floor((now - new Date(r.updatedAt).getTime()) / 3_600_000));
+      return {
+        ...r,
+        statusLabel: REQUEST_STATUS_LABELS[r.status as keyof typeof REQUEST_STATUS_LABELS] ?? r.status,
+        signatures: byRequest.get(r.id) ?? [],
+        pendingStepName: waitingName,
+        canSign: !!pending && this.canSign(pending, r, user),
+        waitingHours,
+        overdue: ['HOAN_TAT', 'DA_HUY'].includes(r.status) ? false : waitingHours > (OVERDUE_HOURS_BY_PRIORITY[r.priority] ?? OVERDUE_HOURS_BY_PRIORITY.NORMAL),
+      };
+    });
 
     return buildPage(items, countRow?.total ?? 0, query.page, query.limit);
   }
@@ -632,6 +684,204 @@ export class HsbaService {
     // Giữ nguyên đối tượng DTO (không trải sang đối tượng mới) rồi bật cờ myTurn
     query.myTurn = true;
     return this.list(query, user);
+  }
+
+  /**
+   * Các phiếu ĐANG MỞ (chưa hoàn tất, chưa huỷ) trùng mã KCB hoặc mã thẻ BHYT —
+   * dùng cho cảnh báo trùng lúc tạo phiếu và ô tra cứu trùng trên giao diện.
+   */
+  async findOpenDuplicates(query: DuplicatesQueryDto) {
+    const clauses: SQL[] = [isNull(hsbaRequests.deletedAt), sql`${hsbaRequests.status} NOT IN ('HOAN_TAT', 'DA_HUY')`];
+    const key = (query.maKcb ?? '').trim();
+    const the = (query.maTheBhyt ?? '').trim();
+    if (!key && !the) return [];
+    const keys: SQL[] = [];
+    if (key) keys.push(sql`upper(${hsbaRequests.maKcb}) = ${key.toUpperCase()}`);
+    if (the) keys.push(sql`upper(${hsbaRequests.maTheBhyt}) = ${the.toUpperCase()}`);
+    clauses.push(or(...keys)!);
+    if (query.excludeId) clauses.push(sql`${hsbaRequests.id} <> ${query.excludeId}`);
+
+    return this.db.db
+      .select({
+        id: hsbaRequests.id,
+        code: hsbaRequests.code,
+        status: hsbaRequests.status,
+        patientName: hsbaRequests.patientName,
+        maKcb: hsbaRequests.maKcb,
+        maTheBhyt: hsbaRequests.maTheBhyt,
+        requesterName: hsbaRequests.requesterName,
+        departmentName: hsbaRequests.departmentName,
+        createdAt: hsbaRequests.createdAt,
+      })
+      .from(hsbaRequests)
+      .where(and(...clauses))
+      .orderBy(desc(hsbaRequests.createdAt))
+      .limit(5);
+  }
+
+  /* =============================================================== BÌNH LUẬN */
+
+  async listComments(id: number, user: AccessContext) {
+    await this.findOne(id, user); // kiểm tra quyền xem phiếu
+    const rows = await this.db.db
+      .select()
+      .from(hsbaComments)
+      .where(and(eq(hsbaComments.requestId, id), isNull(hsbaComments.deletedAt)))
+      .orderBy(asc(hsbaComments.createdAt));
+    const canModerate = user.isSuperAdmin || user.permissions.includes('hsba.request.delete');
+    return rows.map((c) => ({ ...c, canDelete: canModerate || c.userId === user.id }));
+  }
+
+  async addComment(id: number, dto: CreateCommentDto, user: AccessContext, client?: ClientMeta) {
+    const request = await this.findOne(id, user);
+    const content = dto.content.trim();
+    if (!content) throw new BadRequestException('Nội dung trao đổi không được để trống');
+
+    const [row] = await this.db.db
+      .insert(hsbaComments)
+      .values({
+        requestId: id,
+        userId: user.id,
+        username: user.username,
+        fullName: user.fullName,
+        content,
+      })
+      .returning();
+
+    await this.writeLog(id, user, 'COMMENT', 'Thêm trao đổi', request.status, request.status, client);
+
+    // Báo cho các bên liên quan: ngườI tạo, ngườI đề nghị, ngườI ký gần nhất — trừ chính ngườI viết
+    const notifyIds = new Set<number>();
+    if (request.createdBy !== user.id) notifyIds.add(request.createdBy);
+    if (request.requesterId && request.requesterId !== user.id) notifyIds.add(request.requesterId);
+    try {
+      void this.queue.enqueue('hsba.notifyComment', {
+        requestId: id,
+        code: request.code,
+        commenter: user.fullName,
+        userIds: [...notifyIds],
+      });
+    } catch {
+      /* hàng đợi không khả dụng không chặn bài bình luận */
+    }
+    return { ...row, canDelete: true };
+  }
+
+  async removeComment(id: number, commentId: number, user: AccessContext) {
+    const [comment] = await this.db.db
+      .select()
+      .from(hsbaComments)
+      .where(and(eq(hsbaComments.id, commentId), eq(hsbaComments.requestId, id), isNull(hsbaComments.deletedAt)))
+      .limit(1);
+    if (!comment) throw new NotFoundException('Không tìm thấy trao đổi');
+    const canModerate = user.isSuperAdmin || user.permissions.includes('hsba.request.delete');
+    if (comment.userId !== user.id && !canModerate) {
+      throw new ForbiddenException('Chỉ tác giả hoặc ngườI quản trị phiếu mới xoá được trao đổi');
+    }
+    await this.db.db
+      .update(hsbaComments)
+      .set({ deletedAt: new Date() })
+      .where(eq(hsbaComments.id, commentId));
+    return { ok: true };
+  }
+
+  /* ========================================================= TỆP ĐÍNH KÈM */
+
+  async listAttachments(id: number, user: AccessContext) {
+    await this.findOne(id, user);
+    const rows = await this.db.db
+      .select()
+      .from(hsbaAttachments)
+      .where(and(eq(hsbaAttachments.requestId, id), isNull(hsbaAttachments.deletedAt)))
+      .orderBy(asc(hsbaAttachments.createdAt));
+    const canModerate = user.isSuperAdmin || user.permissions.includes('hsba.request.delete');
+    return rows.map((a) => ({ ...a, storagePath: undefined, canDelete: canModerate || a.uploadedBy === user.id }));
+  }
+
+  async uploadAttachment(id: number, dto: CreateAttachmentDto, user: AccessContext, client?: ClientMeta) {
+    const request = await this.findOne(id, user);
+    if (['HOAN_TAT', 'DA_HUY'].includes(request.status)) {
+      throw new BadRequestException('Phiếu đã kết thúc — không đính kèm thêm được');
+    }
+    const mime = (dto.mimeType ?? '').toLowerCase().trim();
+    if (!mime || !ATTACHMENT_MIME[mime]) {
+      throw new BadRequestException(`Kiểu tệp "${mime || 'không rõ'}" không được phép (chỉ ảnh, PDF, Word, Excel)`);
+    }
+    const fileName = path.basename(dto.fileName.trim() || `tep${ATTACHMENT_MIME[mime]}`);
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(dto.contentBase64, 'base64');
+    } catch {
+      throw new BadRequestException('Nội dung tệp không hợp lệ');
+    }
+    if (buffer.length === 0) throw new BadRequestException('Tệp rỗng');
+    if (buffer.length > ATTACHMENT_MAX_BYTES) {
+      throw new BadRequestException(`Tệp vượt ${ATTACHMENT_MAX_BYTES / (1024 * 1024)}MB`);
+    }
+    // Kiểm chữ ký đầu tệp với ảnh/PDF — chống đổi đuôi tệp mã độc
+    const head = buffer.subarray(0, 4).toString('hex');
+    const magicOk =
+      (mime.startsWith('image/png') && head === '89504e47') ||
+      (mime === 'image/jpeg' && head.startsWith('ffd8')) ||
+      (mime === 'application/pdf' && buffer.subarray(0, 4).toString() === '%PDF') ||
+      !['image/png', 'image/jpeg', 'application/pdf'].includes(mime);
+    if (!magicOk) throw new BadRequestException('Nội dung tệp không khớp với kiểu tệp khai báo');
+
+    const relPath = path.join('hsba', String(id), `${randomUUID()}${ATTACHMENT_MIME[mime]}`);
+    const absPath = path.join(config.storage.dir, relPath);
+    await fs.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.writeFile(absPath, buffer);
+
+    const [row] = await this.db.db
+      .insert(hsbaAttachments)
+      .values({
+        requestId: id,
+        fileName,
+        mimeType: mime,
+        sizeBytes: buffer.length,
+        storagePath: relPath,
+        note: dto.note?.trim() ?? '',
+        uploadedBy: user.id,
+        username: user.username,
+        fullName: user.fullName,
+      })
+      .returning();
+
+    await this.writeLog(id, user, 'ATTACHMENT', `Đính kèm tệp "${fileName}"`, request.status, request.status, client);
+    return { ...row, storagePath: undefined, canDelete: true };
+  }
+
+  /** Trả về lối vật lý + metadata để controller stream về trình duyệt. */
+  async readAttachment(id: number, attachmentId: number, user: AccessContext) {
+    await this.findOne(id, user);
+    const [row] = await this.db.db
+      .select()
+      .from(hsbaAttachments)
+      .where(and(eq(hsbaAttachments.id, attachmentId), eq(hsbaAttachments.requestId, id), isNull(hsbaAttachments.deletedAt)))
+      .limit(1);
+    if (!row) throw new NotFoundException('Không tìm thấy tệp đính kèm');
+    const absPath = path.join(config.storage.dir, row.storagePath);
+    // chặn chắc chắn mọi khả năng lọt ra ngoài thư mục gốc lưu trữ
+    if (!path.resolve(absPath).startsWith(path.resolve(config.storage.dir))) {
+      throw new ForbiddenException('Đường dẫn tệp không hợp lệ');
+    }
+    return { row: { ...row, storagePath: undefined }, absPath };
+  }
+
+  async removeAttachment(id: number, attachmentId: number, user: AccessContext, client?: ClientMeta) {
+    const { row, absPath } = await this.readAttachment(id, attachmentId, user);
+    const canModerate = user.isSuperAdmin || user.permissions.includes('hsba.request.delete');
+    if (row.uploadedBy !== user.id && !canModerate) {
+      throw new ForbiddenException('Chỉ ngườI đăng tệp hoặc ngườI quản trị phiếu mới xoá được');
+    }
+    await this.db.db
+      .update(hsbaAttachments)
+      .set({ deletedAt: new Date() })
+      .where(eq(hsbaAttachments.id, attachmentId));
+    await fs.unlink(absPath).catch(() => undefined);
+    const request = await this.findOne(id, user);
+    await this.writeLog(id, user, 'ATTACHMENT_DELETE', `Xoá tệp "${row.fileName}"`, request.status, request.status, client);
+    return { ok: true };
   }
 
   async findOne(id: number, user?: AccessContext) {
@@ -700,6 +950,22 @@ export class HsbaService {
   }
 
   async create(dto: CreateRequestDto, user: AccessContext, client?: ClientMeta) {
+    // Chặn tạo trùng phiếu cho cùng một hồ sơ khi hồ sơ đó còn phiếu ĐANG MỞ —
+    // giao diện phải hiển thị danh sách phiếu đó cho ngườI nhập xác nhận rồi gọi lại với force=true.
+    if (!dto.force) {
+      const dups = await this.findOpenDuplicates({
+        maKcb: dto.maKcb,
+        maTheBhyt: dto.maTheBhyt,
+      });
+      if (dups.length > 0) {
+        throw new ConflictException({
+          code: 'DUPLICATE_OPEN',
+          message: `Đã có ${dups.length} phiếu đang mở cho hồ sơ này — kiểm tra trước khi tạo tiếp`,
+          duplicates: dups,
+        });
+      }
+   }
+
     const [requester] = await this.db.db
       .select({
         id: users.id,
@@ -803,6 +1069,15 @@ export class HsbaService {
 
   async update(id: number, dto: UpdateRequestDto, user: AccessContext) {
     const current = await this.findOne(id);
+    // Chủ sở hữu phiếu: ngườI tạo hoặc ngườI đề nghị; còn lại phải có quyền điều hành toàn bộ phiếu
+    if (
+      !user.isSuperAdmin &&
+      !user.permissions.includes('hsba.request.view-all') &&
+      current.createdBy !== user.id &&
+      current.requesterId !== user.id
+    ) {
+      throw new ForbiddenException('Chỉ ngườI tạo hoặc ngườI đề nghị mới được sửa phiếu này');
+    }
     if (['HOAN_TAT', 'DA_HUY'].includes(current.status)) {
       throw new BadRequestException('Phiếu đã hoàn tất hoặc đã huỷ — không sửa được nội dung');
     }

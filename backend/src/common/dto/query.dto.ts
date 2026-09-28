@@ -74,6 +74,13 @@ export class PaginationQueryDto {
     return this.all ? 5_000 : this.pageSize;
   }
 
+  // Một số màn hình truyền thẳng tham số "limit" — hấp thụ nhẹ nhàng (2..200) thay vì trả lỗi 500
+  // vì class-transformer đòi gán đúng tham số query vào thuộc tính.
+  set limit(value: number) {
+    const n = Number(value);
+    if (Number.isFinite(n) && n >= 2 && n <= 200) this.pageSize = Math.floor(n);
+  }
+
   get offset(): number {
     return this.all ? 0 : (this.page - 1) * this.pageSize;
   }

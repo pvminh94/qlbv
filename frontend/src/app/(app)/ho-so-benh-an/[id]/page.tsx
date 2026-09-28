@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
+import { AttachmentsPanel, CommentsPanel } from '@/components/hsba/side-panels';
 import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
@@ -324,6 +325,43 @@ export default function HsbaDetailPage() {
         </div>
       </div>
 
+      {/* Stepper tiến trình ngang: toàn cảnh vị trí của phiếu trong quy trình */}
+      <Card>
+        <div className="flex items-stretch overflow-x-auto p-3">
+          {data.timeline.map((step, idx) => (
+            <Fragment key={step.key}>
+              {idx > 0 ? (
+                <div
+                  className={cn(
+                    'mt-3 h-0.5 min-w-6 flex-1 self-start rounded-full',
+                    step.state === 'SIGNED' ? 'bg-emerald-500' : 'bg-[var(--border,var(--muted))]',
+                  )}
+                />
+              ) : null}
+              <div className="flex min-w-[7.5rem] flex-col items-center gap-1 px-1 text-center">
+                <span
+                  className={cn(
+                    'flex size-7 items-center justify-center rounded-full border-2 text-[11px] font-semibold',
+                    step.state === 'SIGNED' && 'border-emerald-500 bg-emerald-500 text-white',
+                    step.state === 'PENDING' && 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]',
+                    (step.state === 'WAITING' || step.state === 'SKIPPED') &&
+                      'border-[var(--muted-foreground)]/30 text-[var(--muted-foreground)]',
+                  )}
+                >
+                  {step.state === 'SIGNED' ? <CheckCircle2 className="size-4" /> : step.index + 1}
+                </span>
+                <span className={cn('max-w-28 text-[11px] leading-tight', step.state === 'PENDING' ? 'font-semibold text-[var(--primary)]' : 'text-[var(--muted-foreground)]')}>
+                  {step.name}
+                </span>
+                {step.signature ? (
+                  <span className="text-[9px] text-[var(--muted-foreground)]">{formatDateTime(step.signature.signedAt)}</span>
+                ) : null}
+              </div>
+            </Fragment>
+          ))}
+        </div>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>
@@ -499,8 +537,16 @@ export default function HsbaDetailPage() {
               ))}
             </dl>
           </Card>
+
+          <Card>
+            <CommentsPanel requestId={id} />
+          </Card>
         </div>
       </div>
+
+      <Card>
+        <AttachmentsPanel requestId={id} finished={finished} />
+      </Card>
 
       {/* Ký xác nhận */}
       <Dialog

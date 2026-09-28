@@ -1,12 +1,14 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  CheckCheck,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   FileDown,
   Filter,
+  FilterX,
   PenLine,
   RefreshCw,
   Search,
@@ -49,6 +51,10 @@ interface HsbaRow {
   returnCount: number;
   updatedAt: string;
   canSign?: boolean;
+  /** Số giờ phiếu đang dậm chân tại bước hiện tại (BE tính sẵn) */
+  waitingHours?: number;
+  /** Vượt SLA hiển thị theo mức ưu tiên (BE tính sẵn) */
+  overdue?: boolean;
 }
 
 interface WorkflowStepOption {
@@ -92,6 +98,19 @@ function buildStatusTabs(steps: WorkflowStepOption[]): { value: string; label: s
 function RequestsContent() {
   const params = useSearchParams();
   const can = useAuth((s) => s.can);
+  const queryClient = useQueryClient();
+  /** Ký nhanh: chỉ hiện khi ngườI dùng có ít nhất một quyền ký */
+  const canSomeSign = useMemo(() => {
+    try {
+      return (
+        can('hsba.request.sign-requester') || can('hsba.request.sign-khtb') || can('hsba.request.sign-finance')
+      );
+    } catch {
+      return false;
+    }
+  }, [can]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkNote, setBulkNote] = useState('');
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [keyword, setKeyword] = useState(params.get('q') ?? '');
@@ -178,13 +197,94 @@ function RequestsContent() {
 
   const { data: stats } = useQuery({
     queryKey: ['hsba-stats'],
-    queryFn: () => apiFetch<{ total: number; byStatus: { status: string; label: string; total: number }[] }>('/hsba/requests/stats'),
+    queryFn: () =>
+      apiFetch<{
+        totals: { total: number; pending: number; completed: number; returned: number; avgDays: string };
+        statuses: { status: string; total: number }[];
+      }>('/hsba/requests/stats'),
   });
 
   const statsMap = useMemo(
-    () => Object.fromEntries((stats?.byStatus ?? []).map((s) => [s.status, s.total])),
+    () => Object.fromEntries((stats?.statuses ?? []).map((row) => [row.status, row.total])),
     [stats],
   );
+
+  /** Có ít nhất một điều kiện lọc đang chạy → hiện nút đặt lại tổng */
+  const hasAnyFilter = !!(
+    search ||
+    status ||
+    myTurn ||
+    mine ||
+    dateFrom ||
+    dateTo ||
+    departmentId ||
+    priority ||
+    amountFrom ||
+    amountTo ||
+    doiTuong ||
+    returnedOnly ||
+    deepFilters ||
+    sortBy !== 'createdAt'
+  );
+
+  const resetAllFilters = (): void => {
+    setSearch('');
+    setKeyword('');
+    setStatus('');
+    setMyTurn(false);
+    setMine(false);
+    setDateFrom('');
+    setDateTo('');
+    setSortBy('createdAt');
+    clearAdvanced();
+  };
+
+  /** Các phiếu TREN TRANG hiện được ngườI xem đang có quyền ký → là bóng của cột chọn ký nhanh */
+  const signableOnPage = useMemo(
+    () => (data?.items ?? []).filter((r) => r.canSign).map((r) => r.id),
+    [data],
+  );
+  const selectedOnPage = signableOnPage.filter((id) => selected.has(id));
+  const allPageChecked = signableOnPage.length > 0 && selectedOnPage.length === signableOnPage.length;
+
+  const toggleOne = (id: number): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const togglePage = (): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageChecked) signableOnPage.forEach((id) => next.delete(id));
+      else signableOnPage.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const bulkSign = useMutation({
+    mutationFn: () =>
+      apiFetch<{
+        total: number;
+        success: number;
+        failed: number;
+        results: { id: number; ok: boolean; message?: string; status?: string }[];
+      }>('/hsba/requests/bulk-sign', {
+        method: 'POST',
+        body: { ids: [...selected], note: bulkNote.trim() || undefined },
+      }),
+    onSuccess: (resp) => {
+      setSelected(new Set());
+      setBulkNote('');
+      // Nếu ký lỗi một số phiếu → giữ lại tick để ngườI dùng rà từng cái
+      const failed = (resp?.results ?? []).filter((r) => !r.ok);
+      if (failed.length) setSelected(new Set(failed.map((r) => r.id)));
+      void queryClient.invalidateQueries({ queryKey: ['hsba-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['hsba-stats'] });
+    },
+  });
 
   return (
     <div className="space-y-4">
@@ -204,9 +304,17 @@ function RequestsContent() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Tổng số phiếu" value={formatNumber(stats?.total ?? data?.total ?? 0)} icon={<ClipboardList className="size-4" />} tone="primary" />
-        <StatCard label="Chờ KHTH duyệt" value={formatNumber(statsMap.CHO_KHTB ?? 0)} tone="warning" />
-        <StatCard label="Chờ tài chính" value={formatNumber(statsMap.CHO_TC ?? 0)} tone="warning" />
+        <StatCard label="Tổng số phiếu" value={formatNumber(stats?.totals?.total ?? data?.total ?? 0)} icon={<ClipboardList className="size-4" />} tone="primary" />
+        {/* Các bước xử lý lấy động theo quy trình thật — thêm/bớt bước trong trang
+            Quy trình ký là thẻ thống kê tự cập nhật */}
+        {(workflows ?? []).find((w) => w.isDefault)?.steps?.slice(1, 3).map((step) => (
+          <StatCard
+            key={step.key}
+            label={`Chờ ${step.name.toLowerCase()}`}
+            value={formatNumber(statsMap[`CHO_${step.key}`] ?? 0)}
+            tone="warning"
+          />
+        ))}
         <StatCard label="Đã hoàn tất" value={formatNumber(statsMap.HOAN_TAT ?? 0)} icon={<ShieldCheck className="size-4" />} tone="success" />
       </div>
 
@@ -297,7 +405,46 @@ function RequestsContent() {
           <Button variant="outline" size="sm" onClick={() => refetch()} title="Tải lại">
             <RefreshCw className={cn(isFetching && 'animate-spin')} />
           </Button>
+          {hasAnyFilter ? (
+            <Button variant="ghost" size="sm" onClick={resetAllFilters} title="Đặt lại toàn bộ điều kiện lọc">
+              <FilterX /> Xoá lọc
+            </Button>
+          ) : null}
         </div>
+
+        {/* Thanh ký nhanh — chỉ nổi khi đã chọn phiếu mà ngườI dùng có quyền ký */}
+        {canSomeSign && selected.size > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 border-b bg-[var(--primary)]/5 px-4 py-2">
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--primary)]">
+              <CheckCheck className="size-4" /> Đã chọn {selected.size} phiếu
+            </span>
+            <Input
+              value={bulkNote}
+              onChange={(e) => setBulkNote(e.target.value)}
+              placeholder="Ghi chú ký chung (không bắt buộc)…"
+              className="h-8.5 w-72 text-sm"
+              maxLength={500}
+            />
+            <Button
+              size="sm"
+              disabled={bulkSign.isPending}
+              onClick={() => bulkSign.mutate()}
+            >
+              {bulkSign.isPending ? 'Đang ký…' : `Ký nhanh ${selected.size} phiếu`}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} disabled={bulkSign.isPending}>
+              Bỏ chọn
+            </Button>
+            {bulkSign.isError ? (
+              <span className="text-xs text-[var(--destructive,#b91c1c)]">Có lỗi khi ký — thử lại</span>
+            ) : null}
+            {bulkSign.isSuccess && bulkSign.data && bulkSign.data.failed > 0 ? (
+              <span className="text-xs text-[var(--warning,#b45309)]">
+                {bulkSign.data.success}/{bulkSign.data.total} phiếu đã ký — {bulkSign.data.failed} phiếu giữ lại để xử lý
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         {showAdvanced ? (
           <div className="grid gap-3 border-b bg-[var(--muted)]/40 px-4 py-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -396,19 +543,29 @@ function RequestsContent() {
           <TableWrap>
             <thead>
               <tr>
+                {canSomeSign ? (
+                  <Th className="w-9">
+                    <input type="checkbox" aria-label="Chọn tất cả phiếu ký được trên trang" checked={allPageChecked} onChange={togglePage} disabled={signableOnPage.length === 0} className="align-middle" />
+                  </Th>
+                ) : null}
                 <Th>Số phiếu</Th>
                 <Th>Người bệnh</Th>
                 <Th>Khoa / người đề nghị</Th>
                 <Th>Trạng thái</Th>
                 <Th>Đang chờ</Th>
                 <Th className="text-right">Số tiền</Th>
-                <Th>Cập nhật</Th>
-                <Th className="text-right">Thao tác</Th>
+                <Th className="text-right">Tuổi phiếu</Th>
+                <Th className="sticky right-0 z-[1] bg-[var(--card)] text-right shadow-[-8px_0_12px_-12px_rgba(0,0,0,.35)]">Thao tác</Th>
               </tr>
             </thead>
             <tbody>
               {data?.items.map((row) => (
-                <Tr key={row.id}>
+                <Tr key={row.id} className={cn(selected.has(row.id) && 'bg-[var(--primary)]/5')}>
+                  {canSomeSign ? (
+                    <Td>
+                      <input type="checkbox" aria-label={'Chọn phiếu ' + row.code} checked={selected.has(row.id)} onChange={() => toggleOne(row.id)} disabled={!row.canSign} title={row.canSign ? 'Chọn để ký nhanh' : 'Phiếu này không chờ bạn ký'} className="align-middle disabled:opacity-30" />
+                    </Td>
+                  ) : null}
                   <Td>
                     <Link href={`/ho-so-benh-an/${row.id}`} className="font-mono text-xs font-semibold text-[var(--primary)] hover:underline">
                       {row.code}
@@ -443,8 +600,15 @@ function RequestsContent() {
                   <Td className="text-right text-sm tabular-nums">
                     {row.amount ? Number(row.amount).toLocaleString('vi-VN') : '—'}
                   </Td>
-                  <Td className="whitespace-nowrap text-xs">{formatDate(row.updatedAt)}</Td>
-                  <Td className="text-right">
+                  <Td className="whitespace-nowrap text-right">
+                    <div className={cn('text-xs tabular-nums', row.overdue && 'font-semibold text-[var(--destructive,#b91c1c)]')}>
+                      {(row.waitingHours ?? 0) < 48 ? `${row.waitingHours ?? 0}h` : `${Math.floor((row.waitingHours ?? 0) / 24)} ngày`}
+                    </div>
+                    {row.overdue ? (
+                      <Badge tone="danger">Quá hạn</Badge>
+                    ) : null}
+                  </Td>
+                  <Td className="sticky right-0 bg-[var(--card)] text-right shadow-[-8px_0_12px_-12px_rgba(0,0,0,.35)]">
                     <div className="flex items-center justify-end gap-1">
                       <Link
                         href={`/ho-so-benh-an/${row.id}`}

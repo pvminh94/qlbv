@@ -228,6 +228,15 @@ export class CreateRequestDto {
   @Type(() => Number)
   @IsInt()
   workflowId?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Bỏ qua cảnh báo trùng phiếu — chỉ dùng sau khi giao diện đã hiển thị danh sách phiếu đang mở cùng mã KCB/thẻ cho ngườI nhập xác nhận',
+  })
+  @IsOptional()
+  @Transform(toBoolean)
+  @IsBoolean()
+  force?: boolean;
 }
 
 export class UpdateRequestDto extends PartialType(CreateRequestDto) {
@@ -291,4 +300,55 @@ export class BulkSignDto {
   @IsOptional()
   @IsString()
   note?: string;
+}
+
+
+export class CreateCommentDto {
+  @ApiProperty({ maxLength: 4000 })
+  @IsString()
+  @MaxLength(4000)
+  content!: string;
+}
+
+export class CreateAttachmentDto {
+  @ApiProperty({ maxLength: 255 })
+  @IsString()
+  @MaxLength(255)
+  fileName!: string;
+
+  @ApiPropertyOptional({ maxLength: 127 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(127)
+  mimeType?: string;
+
+  @ApiProperty({ description: 'Nội dung tệp dạng base64 (giới hạn theo cấu hình máy chủ)' })
+  @IsString()
+  contentBase64!: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+export class DuplicatesQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  maKcb?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  maTheBhyt?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  excludeId?: number;
 }

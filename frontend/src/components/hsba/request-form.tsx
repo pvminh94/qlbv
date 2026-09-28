@@ -51,6 +51,16 @@ export interface RequestFormValue {
  * Biểu mẫu phiếu đề nghị sửa HSBA — dùng chung cho trang tạo mới và hộp thoại sửa nội dung
  * khi phiếu bị trả lại.
  */
+/** Thông báo lỗi theo trường của biểu mẫu tạo/sửa phiếu (rỗng = không lỗi) */
+export type RequestFormErrors = Partial<
+  Record<'requesterId' | 'patientName' | 'reason' | 'content', string>
+>;
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-[11px] font-medium text-[var(--destructive,#b91c1c)]">{message}</p>;
+}
+
 export function HsbaRequestForm({
   value,
   onChange,
@@ -58,6 +68,7 @@ export function HsbaRequestForm({
   departments,
   workflows,
   showWorkflow = true,
+  errors,
 }: {
   value: RequestFormValue;
   onChange: (next: RequestFormValue) => void;
@@ -65,6 +76,7 @@ export function HsbaRequestForm({
   departments?: DeptOption[];
   workflows?: WorkflowOption[];
   showWorkflow?: boolean;
+  errors?: RequestFormErrors;
 }) {
   const set = <K extends keyof RequestFormValue>(key: K, next: RequestFormValue[K]): void =>
     onChange({ ...value, [key]: next });
@@ -102,6 +114,7 @@ export function HsbaRequestForm({
                 </option>
               ))}
             </Select>
+            <FieldError message={errors?.requesterId} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="requesterTitle">Chức danh</Label>
@@ -167,7 +180,15 @@ export function HsbaRequestForm({
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="patientName">Họ và tên người bệnh *</Label>
-            <Input id="patientName" value={value.patientName ?? ''} onChange={(e) => set('patientName', e.target.value)} required />
+            <Input
+              id="patientName"
+              value={value.patientName ?? ''}
+              onChange={(e) => set('patientName', e.target.value)}
+              required
+              aria-invalid={!!errors?.patientName}
+              className={errors?.patientName ? 'border-[var(--destructive,#b91c1c)]' : undefined}
+            />
+            <FieldError message={errors?.patientName} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="patientGender">Giới tính</Label>
@@ -220,9 +241,12 @@ export function HsbaRequestForm({
             id="reason"
             rows={3}
             value={value.reason ?? ''}
+            aria-invalid={!!errors?.reason}
+            className={errors?.reason ? 'border-[var(--destructive,#b91c1c)]' : undefined}
             onChange={(e) => set('reason', e.target.value)}
             placeholder="Ví dụ: Nhập sai ngày ra viện do hồ sơ giấy chưa khớp với phần mềm HIS…"
           />
+          <FieldError message={errors?.reason} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="content">Nội dung cần sửa trong HSBA điện tử *</Label>
@@ -230,9 +254,12 @@ export function HsbaRequestForm({
             id="content"
             rows={4}
             value={value.content ?? ''}
+            aria-invalid={!!errors?.content}
+            className={errors?.content ? 'border-[var(--destructive,#b91c1c)]' : undefined}
             onChange={(e) => set('content', e.target.value)}
             placeholder="Ví dụ: Sửa ngày ra viện từ 12/09/2026 thành 15/09/2026; điều chỉnh lại chẩn đoán…"
           />
+          <FieldError message={errors?.content} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">

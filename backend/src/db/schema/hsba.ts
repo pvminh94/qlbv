@@ -223,3 +223,51 @@ export type HsbaRequest = typeof hsbaRequests.$inferSelect;
 export type NewHsbaRequest = typeof hsbaRequests.$inferInsert;
 export type HsbaSignature = typeof hsbaSignatures.$inferSelect;
 export type HsbaWorkflow = typeof hsbaWorkflows.$inferSelect;
+
+/** Trao đổi trên phiếu — phối hợp giữa khối lâm sàng và khối xét duyệt. */
+export const hsbaComments = pgTable(
+  'hsba_comments',
+  {
+    id: serial('id').primaryKey(),
+    requestId: integer('request_id')
+      .notNull()
+      .references(() => hsbaRequests.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    username: text('username').default('').notNull(),
+    fullName: text('full_name').default('').notNull(),
+    title: text('title').default('').notNull(),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    editedAt: timestamp('edited_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('hsba_comments_request_idx').on(t.requestId),
+    index('hsba_comments_request_created_idx').on(t.requestId, t.createdAt),
+  ],
+);
+
+/** Tệp minh chứng đính kèm: hồ sơ giấy, phản hồi BHXH… nội dung nằm ngoài đĩa. */
+export const hsbaAttachments = pgTable(
+  'hsba_attachments',
+  {
+    id: serial('id').primaryKey(),
+    requestId: integer('request_id')
+      .notNull()
+      .references(() => hsbaRequests.id, { onDelete: 'cascade' }),
+    fileName: text('file_name').notNull(),
+    mimeType: text('mime_type').default('application/octet-stream').notNull(),
+    sizeBytes: integer('size_bytes').default(0).notNull(),
+    storagePath: text('storage_path').notNull(),
+    note: text('note').default('').notNull(),
+    uploadedBy: integer('uploaded_by').references(() => users.id, { onDelete: 'set null' }),
+    username: text('username').default('').notNull(),
+    fullName: text('full_name').default('').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [index('hsba_attachments_request_idx').on(t.requestId)],
+);
+
+export type HsbaComment = typeof hsbaComments.$inferSelect;
+export type HsbaAttachment = typeof hsbaAttachments.$inferSelect;

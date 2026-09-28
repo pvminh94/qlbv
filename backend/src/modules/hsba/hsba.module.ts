@@ -48,7 +48,7 @@ export class HsbaQueueHandlers implements OnModuleInit {
           title: `Có phiếu chờ bạn ký: ${code}`,
           body: `Phiếu đề nghị sửa HSBA ${code} đang chờ bạn xử lý ở bước "${stepName}".`,
           level: 'INFO',
-          link: `/ho-so-benh-an/phieu/${requestId}`,
+          link: `/ho-so-benh-an/${requestId}`,
           module: 'HSBA',
           entityId: String(requestId),
         })),
@@ -74,12 +74,35 @@ export class HsbaQueueHandlers implements OnModuleInit {
           title: `Phiếu ${code} bị trả lại`,
           body: `Lý do: ${reason}`,
           level: 'WARNING',
-          link: `/ho-so-benh-an/phieu/${requestId}`,
+          link: `/ho-so-benh-an/${requestId}`,
           module: 'HSBA',
           entityId: String(requestId),
         })),
       );
       return { message: `Đã thông báo trả lại phiếu ${code}` };
+    });
+
+    this.queue.registerHandler('hsba.notifyComment', async (ctx) => {
+      const { requestId, code, commenter, userIds } = ctx.payload as {
+        requestId: number;
+        code: string;
+        commenter: string;
+        userIds: number[];
+      };
+      const targets = (userIds ?? []).filter((id) => typeof id === 'number');
+      if (targets.length === 0) return { message: 'Không có đối tượng cần thông báo bình luận' };
+      await this.db.db.insert(notifications).values(
+        targets.map((userId) => ({
+          userId,
+          title: `Trao đổi mới trên phiếu ${code}`,
+          body: `${commenter} vừa trao đổi về phiếu đề nghị sửa HSBA này.`,
+          level: 'INFO',
+          link: `/ho-so-benh-an/${requestId}`,
+          module: 'HSBA',
+          entityId: String(requestId),
+        })),
+      );
+      return { message: `Đã thông báo bình luận cho ${targets.length} người` };
     });
 
     this.queue.registerHandler('hsba.notifyCompleted', async (ctx) => {
@@ -96,7 +119,7 @@ export class HsbaQueueHandlers implements OnModuleInit {
           title: `Phiếu ${code} đã hoàn tất`,
           body: 'Hồ sơ bệnh án điện tử đã được sửa theo đề nghị.',
           level: 'SUCCESS',
-          link: `/ho-so-benh-an/phieu/${requestId}`,
+          link: `/ho-so-benh-an/${requestId}`,
           module: 'HSBA',
           entityId: String(requestId),
         })),
