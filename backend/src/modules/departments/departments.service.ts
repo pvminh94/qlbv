@@ -228,7 +228,7 @@ export class DepartmentsService {
     const existed = await this.db.db
       .select({ id: departments.id })
       .from(departments)
-      .where(eq(departments.code, dto.code.trim()))
+      .where(and(eq(departments.code, dto.code.trim()), isNull(departments.deletedAt)))
       .limit(1);
     if (existed.length > 0) throw new ConflictException(`Mã đơn vị "${dto.code}" đã tồn tại`);
 
@@ -278,7 +278,7 @@ export class DepartmentsService {
       const dup = await this.db.db
         .select({ id: departments.id })
         .from(departments)
-        .where(and(eq(departments.code, dto.code.trim()), ne(departments.id, id)))
+        .where(and(eq(departments.code, dto.code.trim()), ne(departments.id, id), isNull(departments.deletedAt)))
         .limit(1);
       if (dup.length > 0) throw new ConflictException(`Mã đơn vị "${dto.code}" đã tồn tại`);
     }
@@ -370,6 +370,19 @@ export class DepartmentsService {
   }
 
   async restore(id: number) {
+    const [target] = await this.db.db
+      .select({ code: departments.code })
+      .from(departments)
+      .where(eq(departments.id, id))
+      .limit(1);
+    const [clash] = await this.db.db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(and(eq(departments.code, target?.code ?? ''), ne(departments.id, id), isNull(departments.deletedAt)))
+      .limit(1);
+    if (clash) {
+      throw new ConflictException(`Mã đơn vị "${target?.code ?? ''}" đang thuộc một đơn vị hoạt động khác — sửa mã trước khi phục hồi`);
+    }
     const [updated] = await this.db.db
       .update(departments)
       .set({ active: true, deletedAt: null, updatedAt: new Date() })

@@ -55,7 +55,7 @@ export const users = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('users_username_uq').on(t.username),
+    uniqueIndex('users_username_uq').on(t.username).where(sql`${t.deletedAt} is null`),
     index('users_department_idx').on(t.departmentId),
     index('users_active_idx').on(t.active),
     // Lọc theo khoa và liệt kê tài khoản đang dùng rất thường xuyên

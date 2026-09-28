@@ -215,7 +215,7 @@ export class UsersService {
     const dup = await this.db.db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.username, username))
+      .where(and(eq(users.username, username), isNull(users.deletedAt)))
       .limit(1);
     if (dup.length > 0) throw new ConflictException(`Tên đăng nhập "${username}" đã tồn tại`);
 
@@ -265,7 +265,7 @@ export class UsersService {
       const dup = await this.db.db
         .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.username, dto.username.toLowerCase()), ne(users.id, id)))
+        .where(and(eq(users.username, dto.username.toLowerCase()), ne(users.id, id), isNull(users.deletedAt)))
         .limit(1);
       if (dup.length > 0) throw new ConflictException(`Tên đăng nhập "${dto.username}" đã tồn tại`);
     }
@@ -328,6 +328,21 @@ export class UsersService {
   }
 
   async restore(id: number) {
+    const [target] = await this.db.db
+      .select({ username: users.username })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    // Tài khoản khác đang hoạt động mà chiếm tên đăng nhập thì không phục hồi được —
+    // khoá partial unique ở DB sẽ từ chối lẻ lỗi thô, nên báo rõ ngay từ tầng service
+    const [clash] = await this.db.db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.username, target?.username ?? ''), ne(users.id, id), isNull(users.deletedAt)))
+      .limit(1);
+    if (clash) {
+      throw new ConflictException(`Tên đăng nhập "${target?.username ?? ''}" đang thuộc một tài khoản hoạt động khác — sửa tên trước khi phục hồi`);
+    }
     await this.db.db
       .update(users)
       .set({ active: true, deletedAt: null, updatedAt: new Date() })

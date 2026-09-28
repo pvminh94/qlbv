@@ -31,6 +31,8 @@ export const TABLE_COMMENTS: Record<string, string> = {
   'hsba_requests': 'Phiếu đề nghị sửa hồ sơ bệnh án — luồng: tạo → KHTH duyệt → tài chính → hoàn tất',
   'hsba_signatures': 'Chữ ký xác nhận theo từng bước quy trình (kèm băm nội dung lúc ký)',
   'hsba_logs': 'Nhật ký mọi thao tác trên từng phiếu (chuyển bước, bình luận, trả lại…)',
+  'hsba_comments': 'Trao đổi nội bộ trên từng phiếu — thay đổi không kinh chữ ký, xoá mềm',
+  'hsba_attachments': 'Tệp minh chứng đính kèm phiếu (sổ BHYT, chứng từ…) — tệp vật lý trên ổ đĩa, xoá mềm',
   'print_templates': 'Mẫu bản in thiết kế động (khổ giấy, font, ảnh, chữ ký) dùng cho PDF/Excel/Word',
   'print_template_versions': 'Các phiên bản đã lưu của mẫu in (phục hồi khi cần)',
   'report_templates': 'Mẫu báo cáo công tác theo khoa (dòng/cột do người dùng tự thiết kế)',
@@ -132,6 +134,18 @@ export const COLUMN_COMMENTS: Record<string, Record<string, string>> = {
     'detail': 'Chi tiết thao tác (JSON)',
     'from_status': 'Trạng thái trước',
     'to_status': 'Trạng thái sau',
+  },
+  'hsba_comments': {
+    'request_id': 'ID phiếu đề nghị trao đổi thuộc về (hsba_requests)',
+    'content': 'Nội dung trao đổi (plain text)',
+    'edited_at': 'Thời điểm sửa lần cuối (null = chưa sửa)',
+  },
+  'hsba_attachments': {
+    'request_id': 'ID phiếu đề nghị tệp thuộc về (hsba_requests)',
+    'file_name': 'Tên tệp gốc người dùng tải lên (không tin cậy — tham chiếu khi hiển thị)',
+    'mime_type': 'Kiểu nội dung tệp (MIME type)',
+    'size_bytes': 'Kích thước tệp (bytes)',
+    'uploaded_by': 'ID người tải tệp (users)',
   },
   'hsba_requests': {
     'workflow_id': 'Quy trình ký áp dụng (hsba_workflows)',

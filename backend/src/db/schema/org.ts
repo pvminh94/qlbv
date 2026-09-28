@@ -48,7 +48,7 @@ export const departments = pgTable(
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex('departments_code_uq').on(t.code),
+    uniqueIndex('departments_code_uq').on(t.code).where(sql`${t.deletedAt} is null`),
     index('departments_parent_idx').on(t.parentId),
     index('departments_path_idx').on(t.path),
     index('departments_active_idx').on(t.active),
