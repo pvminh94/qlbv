@@ -293,7 +293,7 @@ function DataSpecEditor({
   const dateColumns = source?.columns.filter((c) => c.type === 'date' || c.type === 'datetime') ?? [];
 
   const setMetric = (i: number, changes: Partial<StudioMetric>) =>
-    patchSpec({ metrics: spec.metrics.map((m, idx) => (idx === i ? { ...m, ...changes } : m)) });
+    patchSpec({ metrics: (spec.metrics ?? []).map((m, idx) => (idx === i ? { ...m, ...changes } : m)) });
   const setDimension = (i: number, changes: Partial<StudioDimension>) =>
     patchSpec({ dimensions: (spec.dimensions ?? []).map((d, idx) => (idx === i ? { ...d, ...changes } : d)) });
   const setFilter = (i: number, changes: Partial<StudioFilter>) =>
@@ -328,14 +328,14 @@ function DataSpecEditor({
           <Button
             size="sm"
             variant="ghost"
-            disabled={spec.metrics.length >= 4}
-            onClick={() => patchSpec({ metrics: [...spec.metrics, { field: source?.columns.find((c) => c.key === 'id')?.key ?? source?.columns[0]?.key ?? '*', agg: 'count' }] })}
+            disabled={(spec.metrics ?? []).length >= 4}
+            onClick={() => patchSpec({ metrics: [...(spec.metrics ?? []), { field: source?.columns.find((c) => c.key === 'id')?.key ?? source?.columns[0]?.key ?? '*', agg: 'count' }] })}
           >
             <Plus className="size-3.5" /> Thêm chỉ số
           </Button>
         </div>
         <div className="space-y-2">
-          {spec.metrics.map((m, i) => {
+          {(spec.metrics ?? []).map((m, i) => {
             const column = source?.columns.find((c) => c.key === m.field);
             const numericOnly = ['sum', 'avg', 'min', 'max'];
             return (
@@ -362,8 +362,8 @@ function DataSpecEditor({
                 <button
                   type="button"
                   className="rounded p-1.5 text-rose-500 hover:bg-rose-50"
-                  onClick={() => patchSpec({ metrics: spec.metrics.filter((_, idx) => idx !== i) })}
-                  disabled={spec.metrics.length <= 1}
+                  onClick={() => patchSpec({ metrics: (spec.metrics ?? []).filter((_, idx) => idx !== i) })}
+                  disabled={(spec.metrics ?? []).length <= 1}
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -525,7 +525,7 @@ function DataSpecEditor({
             {(spec.dimensions ?? []).map((d, i) => (
               <option key={`d${i}`} value={`d${i}`}>Nhóm {i + 1}</option>
             ))}
-            {spec.metrics.map((m, i) => (
+            {(spec.metrics ?? []).map((m, i) => (
               <option key={`m${i}`} value={`m${i}`}>Chỉ số {i + 1}{m.label ? ` (${m.label})` : ''}</option>
             ))}
           </Select>

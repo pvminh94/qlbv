@@ -2,7 +2,7 @@
 
 /** Xem/chỉnh sửa một trang bảng điều khiển theo id */
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/shared/page-header';
 import { Skeleton } from '@/components/ui/card';
 import { studioApi } from '@/lib/studio';
@@ -12,6 +12,8 @@ export default function DashboardByIdPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = Number(params.id);
+  const searchParams = useSearchParams();
+  const openSubs = searchParams.get('an-ban') === '1';
 
   const meta = useStudioMeta();
   const page = useQuery({
@@ -41,6 +43,7 @@ export default function DashboardByIdPage() {
       ) : (
         <StudioPageFrame
           page={page.data}
+          autoOpenSubscriptions={openSubs}
           pages={pages.data ?? [page.data]}
           sources={meta.data?.sources ?? []}
           vocabulary={meta.data?.vocabulary ?? { aggs: {}, filterOps: {}, datePresets: {}, buckets: {} } as never}

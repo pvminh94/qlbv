@@ -251,6 +251,22 @@ export class AuthService {
     const cached = await this.cache.get<Omit<AccessContext, 'sessionId'>>(`auth:ctx:${userId}`);
     if (cached) return { ...cached, sessionId };
 
+    return this.assembleContext(userId, sessionId);
+  }
+
+  /**
+   * Dựng ngữ cảnh cho tác vụ nền (ẤN BẢN định kỳ, hàng đợi) — KHÔNG qua phiên
+   * đăng nhập. Chỉ gọi nội bộ từ các service hệ thống, tuyệt đối không gắn
+   * vào endpoint. `tag` ghi danh nguồn gốc vào sessionId để nhật ký dễ truy.
+   */
+  async buildSystemContext(userId: number, tag = 'system'): Promise<AccessContext | null> {
+    const cached = await this.cache.get<Omit<AccessContext, 'sessionId'>>(`auth:ctx:${userId}`);
+    if (cached) return { ...cached, sessionId: `system:${tag}` };
+    return this.assembleContext(userId, `system:${tag}`);
+  }
+
+  private async assembleContext(userId: number, sessionId: string): Promise<AccessContext | null> {
+
     const [user] = await this.db.db
       .select({
         id: users.id,

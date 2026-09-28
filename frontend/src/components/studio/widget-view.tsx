@@ -10,7 +10,7 @@ import {
   AlertTriangle,
   Download,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -36,6 +36,8 @@ import {
   type StudioWidget,
 } from '@/lib/studio';
 import { apiFetch, downloadFile } from '@/lib/api';
+import { buildDrilldownSpec, describeDrilldown, type DrillPoint } from './drilldown-shared';
+import { DrilldownDialog } from './drilldown-dialog';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/card';
 
@@ -72,13 +74,13 @@ export function useWidgetData(spec?: StudioDataSpec, enabled = true) {
   });
 }
 
-interface ChartRow { name: string;[key: string]: string | number }
+interface ChartRow { name: string; _raw?: string;[key: string]: string | number | undefined }
 
 /** Chuẩn hoá rows engine → dữ liệu recharts (điền ngày trống khi fillGaps) */
 export function toChartData(result: StudioQueryResult, spec: StudioDataSpec, widget: StudioWidget): ChartRow[] {
   const metrics = result.columns.filter((c) => c.role === 'metric');
   let rows = result.rows.map((r) => {
-    const out: ChartRow = { name: String(r.d0 ?? r.d1 ?? '—') };
+    const out: ChartRow = { name: String(r.d0 ?? r.d1 ?? '—'), _raw: String(r.d0 ?? r.d1 ?? '') };
     metrics.forEach((m) => { out[m.key] = Number(r[m.key] ?? 0); });
     return out;
   });
@@ -88,7 +90,7 @@ export function toChartData(result: StudioQueryResult, spec: StudioDataSpec, wid
     if (seq.length) {
       rows = seq.map((day) => {
         const hit = result.rows.find((r) => String(r.d0) === day);
-        const out: ChartRow = { name: day.slice(5) };
+        const out: ChartRow = { name: day.slice(5), _raw: day };
         metrics.forEach((m) => { out[m.key] = hit ? Number(hit[m.key] ?? 0) : 0; });
         return out;
       });
@@ -108,7 +110,7 @@ const KPI_TONES: Record<string, string> = {
   muted: 'text-zinc-500',
 };
 
-function KpiView({ widget }: { widget: StudioWidget }) {
+function KpiView({ widget, onDrill }: { widget: StudioWidget; onDrill?: (point: DrillPoint) => void }) {
   const { data, isLoading, error, dataUpdatedAt } = useWidgetData(widget.dataSpec);
   if (isLoading) return <Skeleton className="h-full min-h-24" />;
   const tone = String(widget.options?.tone ?? 'default');
@@ -120,7 +122,11 @@ function KpiView({ widget }: { widget: StudioWidget }) {
       ? `${formatNumber(value)} đ`
       : formatNumber(value);
   return (
-    <div className="flex h-full flex-col justify-center gap-1">
+    <div
+      className={`flex h-full flex-col justify-center gap-1 ${onDrill ? 'cursor-pointer rounded-lg transition hover:bg-[var(--accent)]' : ''}`}
+      title={onDrill ? 'Bấm để xem các bản ghi gốc' : undefined}
+      onClick={onDrill ? () => onDrill({ dims: [], display: '' }) : undefined}
+    >
       <div className="truncate text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         {widget.title}
       </div>
@@ -140,7 +146,7 @@ function KpiView({ widget }: { widget: StudioWidget }) {
 
 /* --------------------------------------------------------------- Charts */
 
-function ChartView({ widget }: { widget: StudioWidget }) {
+function ChartView({ widget, onDrill }: { widget: StudioWidget; onDrill?: (point: DrillPoint) => void }) {
   const { data, isLoading, error } = useWidgetData(widget.dataSpec);
   const chartData = useMemo(
     () => (data && widget.dataSpec ? toChartData(data, widget.dataSpec, widget) : []),
@@ -154,11 +160,29 @@ function ChartView({ widget }: { widget: StudioWidget }) {
   const axisX = { fontSize: 11, stroke: 'var(--muted-foreground)' } as const;
   const showLegend = metrics.length > 1;
 
+  /** Bấm vào một phân đoạn/cột/điểm → mở bản ghi gốc theo giá trị kích thước d0 */
+  const spec = widget.dataSpec;
+  const dim0 = spec.dimensions?.[0];
+  const dimCols = data.columns.filter((c) => c.role === 'dimension');
+  const pickRaw = (p: unknown): string => {
+    const o = p as Record<string, unknown> | null | undefined;
+    return String(o?._raw ?? (o?.payload as Record<string, unknown> | undefined)?._raw ?? o?.name ?? (o?.payload as Record<string, unknown> | undefined)?.name ?? '');
+  };
+  const clickPoint = onDrill && dim0
+    ? (payload: unknown) => {
+        const raw = pickRaw(payload);
+        if (!raw || raw === '—') return;
+        onDrill({ dims: [{ ...dim0, bucket: dim0.bucket as DrillPoint['dims'][number]['bucket'], value: raw, label: dimCols[0]?.label ?? dim0.field }], display: raw });
+      }
+    : undefined;
+  const cursor = clickPoint ? { cursor: 'pointer' } : undefined;
+
   if (widget.type === 'pie' || widget.type === 'donut') {
     return (
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
+            onClick={clickPoint ? (d) => clickPoint(d) : undefined}
             data={chartData}
             dataKey="m0"
             nameKey="name"
@@ -194,7 +218,7 @@ function ChartView({ widget }: { widget: StudioWidget }) {
           />
           <Tooltip />
           {metrics.map((m, i) => (
-            <Bar key={m.key} dataKey={m.key} name={m.label} fill={PALETTE[i % PALETTE.length]} radius={[0, 6, 6, 0]} maxBarSize={18} />
+            <Bar key={m.key} dataKey={m.key} name={m.label} fill={PALETTE[i % PALETTE.length]} radius={[0, 6, 6, 0]} maxBarSize={18} style={cursor} onClick={clickPoint ? (d) => clickPoint(d) : undefined} />
           ))}
           {showLegend && <Legend wrapperStyle={{ fontSize: 11 }} />}
         </BarChart>
@@ -211,7 +235,7 @@ function ChartView({ widget }: { widget: StudioWidget }) {
           <YAxis tick={axisX} allowDecimals={false} />
           <Tooltip />
           {metrics.map((m, i) => (
-            <Bar key={m.key} dataKey={m.key} name={m.label} fill={PALETTE[i % PALETTE.length]} radius={[6, 6, 0, 0]} maxBarSize={34} />
+            <Bar key={m.key} dataKey={m.key} name={m.label} fill={PALETTE[i % PALETTE.length]} radius={[6, 6, 0, 0]} maxBarSize={34} style={cursor} onClick={clickPoint ? (d) => clickPoint(d) : undefined} />
           ))}
           {showLegend && <Legend wrapperStyle={{ fontSize: 11 }} />}
         </BarChart>
@@ -223,7 +247,14 @@ function ChartView({ widget }: { widget: StudioWidget }) {
   const SeriesComp = widget.type === 'area' ? Area : Line;
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ChartComp data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+      <ChartComp
+        data={chartData}
+        margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+        onClick={clickPoint ? (state) => {
+          const pl = (state as { activePayload?: { payload?: unknown }[] })?.activePayload?.[0]?.payload;
+          if (pl) clickPoint(pl);
+        } : undefined}
+      >
         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
         <XAxis dataKey="name" tick={axisX} />
         <YAxis tick={axisX} allowDecimals={false} />
@@ -266,13 +297,22 @@ function WidgetError({ error }: { error: Error }) {
 
 /* ---------------------------------------------------------------- Table */
 
-function TableView({ widget }: { widget: StudioWidget }) {
+function TableView({ widget, onDrill }: { widget: StudioWidget; onDrill?: (point: DrillPoint) => void }) {
   const { data, isLoading, error } = useWidgetData(widget.dataSpec);
   if (isLoading) return <Skeleton className="h-full min-h-40" />;
   if (error) return <WidgetError error={error as Error} />;
   if (!data) return null;
   const dim = data.columns.filter((c) => c.role === 'dimension');
   const metrics = data.columns.filter((c) => c.role === 'metric');
+  const dims = widget.dataSpec?.dimensions ?? [];
+  const rowClick = onDrill && dims.length
+    ? (row: Record<string, unknown>) => onDrill({
+        dims: dims.map((d, i) => ({ ...d, bucket: d.bucket as DrillPoint['dims'][number]['bucket'], value: row[`d${i}`], label: dim[i]?.label ?? d.field })),
+        display: '',
+      })
+    : widget.dataSpec && onDrill
+      ? () => onDrill({ dims: [], display: '' })
+      : undefined;
   return (
     <div className="flex h-full flex-col">
       {data.meta.truncated ? (
@@ -298,7 +338,12 @@ function TableView({ widget }: { widget: StudioWidget }) {
               </tr>
             ) : (
               data.rows.map((row, i) => (
-                <tr key={i} className="border-b last:border-0 hover:bg-[var(--accent)]">
+                <tr
+                  key={i}
+                  className={`border-b last:border-0 hover:bg-[var(--accent)] ${rowClick ? 'cursor-pointer' : ''}`}
+                  onClick={rowClick ? () => rowClick(row) : undefined}
+                  title={rowClick ? 'Bấm để xem các bản ghi gốc' : undefined}
+                >
                   {dim.map((c) => (
                     <td key={c.key} className="px-2 py-1.5">
                       {c.type === 'date' || c.type === 'datetime' ? formatDate(String(row[c.key] ?? '')) : String(row[c.key] ?? '—')}
@@ -454,7 +499,7 @@ function ExportButton({ widget, className = '' }: { widget: StudioWidget; classN
 /** Chiều cao theo nấc S/M/L (px) */
 export const WIDGET_HEIGHTS: Record<StudioWidget['h'], number> = { S: 132, M: 300, L: 420 };
 
-export function WidgetBody({ widget }: { widget: StudioWidget }) {
+export function WidgetBody({ widget, onDrill }: { widget: StudioWidget; onDrill?: (point: DrillPoint) => void }) {
   if (widget.type === 'text') return <TextView widget={widget} />;
   if (widget.type === 'builtin') {
     if (widget.builtin === 'jobs') return <BuiltinJobs />;
@@ -462,14 +507,25 @@ export function WidgetBody({ widget }: { widget: StudioWidget }) {
     if (widget.builtin === 'notifications') return <BuiltinNotifications />;
     return <EmptyChart />;
   }
-  if (widget.type === 'kpi') return <KpiView widget={widget} />;
-  if (widget.type === 'table') return <TableView widget={widget} />;
-  return <ChartView widget={widget} />;
+  if (widget.type === 'kpi') return <KpiView widget={widget} onDrill={onDrill} />;
+  if (widget.type === 'table') return <TableView widget={widget} onDrill={onDrill} />;
+  return <ChartView widget={widget} onDrill={onDrill} />;
 }
 
 /** Hiển thị widget hoàn chỉnh gồm thanh tiêu đề (dùng trong chế độ xem) */
 export function WidgetCard({ widget, height }: { widget: StudioWidget; height: number }) {
   const showHeader = widget.type !== 'kpi' && widget.type !== 'text';
+  const [drill, setDrill] = useState<{ spec: StudioDataSpec; desc: string } | null>(null);
+  const spec = widget.dataSpec;
+  const canDrill = !!spec?.source && widget.type !== 'text' && widget.type !== 'builtin';
+
+  const onDrill = canDrill
+    ? (point: DrillPoint) => {
+        const ds = buildDrilldownSpec(spec as StudioDataSpec, point);
+        if (ds) setDrill({ spec: ds, desc: describeDrilldown(point) });
+      }
+    : undefined;
+
   return (
     <div
       className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border bg-[var(--card)] shadow-sm"
@@ -482,11 +538,15 @@ export function WidgetCard({ widget, height }: { widget: StudioWidget; height: n
         </div>
       ) : null}
       <div className="min-h-0 flex-1 p-3">
-        <WidgetBody widget={widget} />
+        <WidgetBody widget={widget} onDrill={onDrill} />
       </div>
-      {widget.type === 'kpi' ? (
-        <div className="absolute right-0 top-0 hidden" />
-      ) : null}
+      <DrilldownDialog
+        open={!!drill}
+        onClose={() => setDrill(null)}
+        title={`Bản ghi gốc — ${widget.title || 'ô dữ liệu'}`}
+        description={drill?.desc || 'Theo bộ lọc của ô'}
+        spec={drill?.spec ?? null}
+      />
     </div>
   );
 }

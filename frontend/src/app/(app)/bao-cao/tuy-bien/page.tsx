@@ -15,7 +15,8 @@ import { formatDateTime } from '@/lib/utils';
 export default function CustomReportsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const canManage = useAuth((s) => s.can)('studio.report.manage');
+  // Mọi ngườI có quyền xem đều tạo được báo cáo cá nhân; backend chỉ yêu cầu manage cho trang dùng chung
+  const canManage = useAuth((s) => s.can)('studio.report.view');
   const user = useAuth((s) => s.user);
   const isAdmin = !!user?.isSuperAdmin || (user?.roles ?? []).includes('ADMIN');
 

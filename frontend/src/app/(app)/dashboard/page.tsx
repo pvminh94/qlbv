@@ -6,7 +6,7 @@
  * thành bản riêng (kéo-thả, thêm ô, tự chọn nguồn số liệu).
  */
 import { useQuery } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/shared/page-header';
 import { Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ import { StudioPageFrame, useStudioMeta } from '@/components/studio/studio-page'
 export default function DashboardPage() {
   const router = useRouter();
   const user = useAuth((s) => s.user);
+  const searchParams = useSearchParams();
+  const openSubs = searchParams.get('an-ban') === '1';
 
   const meta = useStudioMeta();
   const pages = useQuery({
@@ -36,7 +38,7 @@ export default function DashboardPage() {
         title={`Xin chào${firstName ? `, ${firstName}` : ''}`}
         description="Bảng điều khiển tuỳ biến — số liệu theo phạm vi được phép, tự cập nhật khi có thay đổi"
         actions={
-          useAuth.getState().can('studio.dashboard.manage') ? (
+          useAuth.getState().can('studio.dashboard.view') ? (
             <Button
               variant="outline"
               onClick={async () => {
@@ -70,6 +72,7 @@ export default function DashboardPage() {
         <StudioPageFrame
           page={def.data}
           pages={pages.data ?? [def.data]}
+          autoOpenSubscriptions={openSubs}
           sources={meta.data?.sources ?? []}
           vocabulary={meta.data?.vocabulary ?? { aggs: {}, filterOps: {}, datePresets: {}, buckets: {} } as never}
           allowDelete={false}

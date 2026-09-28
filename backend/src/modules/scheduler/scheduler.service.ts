@@ -9,6 +9,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnApplicationBootstrap,
   OnModuleInit,
 } from '@nestjs/common';
 import { CronExpressionParser } from 'cron-parser';
@@ -63,7 +64,7 @@ const HANDLER_DESCRIPTIONS: Record<string, string> = {
 };
 
 @Injectable()
-export class SchedulerService implements OnModuleInit {
+export class SchedulerService implements OnModuleInit, OnApplicationBootstrap {
   private readonly logger = new Logger(SchedulerService.name);
   private readonly running = new Set<string>();
 
@@ -89,8 +90,22 @@ export class SchedulerService implements OnModuleInit {
     }
 
     this.logger.log(`Đã đăng ký ${builtins.size} hàm xử lý: ${[...builtins.keys()].join(', ')}`);
+  }
 
-    // 3. Nạp lịch định kỳ đang bật
+  /**
+   * Đăng ký hàm xử lý từ module nghiệp vụ khác (Studio…).
+   * Tự bọc theo dõi: ghi lịch sử chạy + cập nhật trạng thái tác vụ như builtin.
+   */
+  registerHandler(code: string, handler: JobHandler): void {
+    this.queue.registerHandler(code, (ctx) => this.tracked(code, handler, ctx));
+  }
+
+  /**
+   * Nạp lịch SAU KHI mọi module đã khởi tạo xong — các module khác
+   * (HSBA, Studio…) đăng ký hàm xử lý trong onModuleInit của chúng,
+   * nên phải chờ đến lượt này hasHandler mới đầy đủ.
+   */
+  async onApplicationBootstrap(): Promise<void> {
     if (config.queue.autoSchedule) await this.syncSchedules();
   }
 

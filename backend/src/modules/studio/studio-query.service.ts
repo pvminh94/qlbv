@@ -1,6 +1,6 @@
 /**
  * Studio — query engine: dịch đặc tả widget (StudioDataSpec) thành truy vấn
- * an toàn. MơI tên trường/toán tử/nhóm đều phải khớp whitelist trong
+ * an toàn. Mỗ tên trường/toán tử/nhóm đều phải khớp whitelist trong
  * `studio-datasources` + `studio.types`; không một chuỗi nào từ client
  * được ghép trực tiếp vào SQL.
  */
@@ -234,6 +234,8 @@ export class StudioQueryService {
     if (!def) throw new BadRequestException(`Nguồn dữ liệu \"${spec.source}\" không tồn tại`);
     this.assertSourceAllowed(def, user);
 
+    if (spec.mode === 'records') return this.runRecords(def, spec, user);
+
     const metrics = spec.metrics ?? [];
     const dimensions = spec.dimensions ?? [];
     if (!metrics.length) throw new BadRequestException('Cần ít nhất một chỉ số (metric)');
@@ -308,5 +310,70 @@ export class StudioQueryService {
     const rows = truncated ? raw.slice(0, limit) : raw;
 
     return { columns, rows, meta: { source: def.key, total: rows.length, truncated } };
+  }
+
+  /**
+   * Chế độ records — danh sách bản ghi gốc phục vụ drill-down.
+   * Bỏ qua metrics/dimensions; select cột khai báo trong spec.fields
+   * (whitelist của nguồn) hoặc cột mặc định recordDefault của nguồn.
+   * meta.total = tổng số bản ghi khớp (đếm thật) để phân trang.
+   */
+  private async runRecords(def: DataSourceDef, spec: StudioDataSpec, user: AccessContext): Promise<StudioQueryResult> {
+    /* --- cột chọn --- */
+    let keys = Array.isArray(spec.fields) && spec.fields.length
+      ? spec.fields.map(String).slice(0, 12)
+      : (def.recordDefault ?? def.columns.map((c) => c.key));
+    keys = keys.filter((k) => def.columns.some((c) => c.key === k));
+    if (!keys.length) keys = def.columns.slice(0, 6).map((c) => c.key);
+
+    const select: Record<string, SQL<any>> = {};
+    const columns: StudioColumn[] = [];
+    for (const key of keys) {
+      const column = this.columnOf(def, key);
+      select[key] = column.expr as SQL<any>;
+      columns.push({
+        key,
+        label: column.label,
+        type: column.type === 'enum' || column.type === 'boolean' ? 'text' : column.type,
+        role: 'dimension',
+      });
+    }
+
+    /* --- where --- */
+    const conditions: (SQL | undefined)[] = [...baseConditions(def, user)];
+    for (const f of spec.filters ?? []) conditions.push(this.filterExpr(def, f));
+    const dateCond = this.dateRangeExpr(def, spec);
+    if (dateCond) conditions.push(dateCond);
+    const where = and(...conditions.filter((c): c is SQL => !!c));
+
+    /* --- sắp xếp + phân trang --- */
+    const orderExprs: SQL<any>[] = [];
+    for (const o of spec.orderBy ?? []) {
+      const expr = select[o.key];
+      if (!expr) throw new BadRequestException(`Không thể sắp xếp theo \\"${o.key}\\"`);
+      orderExprs.push(o.dir === 'desc' ? desc(expr) : asc(expr));
+    }
+    const limit = Math.min(Math.max(Number(spec.limit) || 50, 1), HARD_LIMIT);
+    const offset = Math.min(Math.max(Number(spec.offset) || 0, 0), 10_000);
+
+    /* --- chạy: đếm tổng + bản ghi trang hiện tại --- */
+    const buildBase = () => {
+      let qb = this.db.db.select(select).from(def.from as never).$dynamic();
+      for (const join of def.joins ?? []) qb = qb.leftJoin(join.table as never, join.on);
+      if (where) qb = qb.where(where);
+      return qb;
+    };
+
+    // Đếm tổng (dùng subquery để an toàn với mọi join)
+    const baseQb = buildBase();
+    const countQb = this.db.db.select({ n: sql<number>`count(*)::int` }).from(baseQb.as('t'));
+    const [{ n: total }] = await countQb;
+
+    let qb = buildBase();
+    if (orderExprs.length) qb = qb.orderBy(...orderExprs);
+    qb = qb.limit(limit).offset(offset);
+    const rows = (await qb) as Record<string, unknown>[];
+
+    return { columns, rows, meta: { source: def.key, total: Number(total) || 0, truncated: offset + rows.length < (Number(total) || 0) } };
   }
 }

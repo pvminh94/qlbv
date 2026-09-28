@@ -134,15 +134,28 @@ export interface StudioOrderBy {
   dir: 'asc' | 'desc';
 }
 
+/**
+ * Chế độ chạy:
+ *  - aggregate (mặc định): chỉ số + nhóm — phục vụ biểu đồ/bảng/KPI;
+ *  - records: danh sách bản ghi gốc (drill-down) — có phân trang offset/total thật.
+ */
+export const STUDIO_QUERY_MODES = ['aggregate', 'records'] as const;
+export type StudioQueryMode = (typeof STUDIO_QUERY_MODES)[number];
+
 /** Đặc tả truy vấn dữ liệu cho một widget (được validate nghiêm ngặt) */
 export interface StudioDataSpec {
   source: string;
+  mode?: StudioQueryMode;
   metrics?: StudioMetric[];
   dimensions?: StudioDimension[];
   filters?: StudioFilter[];
   dateRange?: StudioDateRange;
   orderBy?: StudioOrderBy[];
   limit?: number;
+  /** Chỉ dùng với mode=records: bỏ qua N dòng đầu (phân trang) */
+  offset?: number;
+  /** Chỉ dùng với mode=records: chọn cột hiển thị (mặc định theo nguồn) */
+  fields?: string[];
 }
 
 export interface StudioColumn {

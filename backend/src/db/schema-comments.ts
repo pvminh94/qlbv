@@ -55,6 +55,8 @@ export const TABLE_COMMENTS: Record<string, string> = {
   'asset_inventories': 'Đợt kiểm kê tài sản (phạm vi, thành phần, kiểm kê mù, kết luận)',
   'asset_inventory_items': 'Từng tài sản trong phạm vi đợt kiểm kê: sổ sách vs thực tế, cách xử lý chênh lệch',
   'asset_inventory_scans': 'Từng lượt quét mã khi kiểm kê (kể cả quét offline đồng bộ sau — idempotent)',
+  studio_subscriptions: 'Đăng ký nhận ấn bản Excel định kỳ của trang Studio (dashboard/báo cáo)',
+  studio_subscription_files: 'Ấn bản Excel đã phát hành của các đăng ký Studio',
 };
 
 /** Ghi chú theo TỪNG CỘT của bảng (ưu tiên cao hơn COLUMN_COMMENTS_COMMON) */
@@ -536,6 +538,37 @@ export const COLUMN_COMMENTS: Record<string, Record<string, string>> = {
     'kind': 'KHU | TOA_NHA | TANG | PHONG | KHO | KHAC',
   },
 
+  studio_subscriptions: {
+    _table: 'Đăng ký nhận ấn bản Excel định kỳ của trang Studio',
+    id: 'Khoá chính',
+    page_id: 'Trang Studio (FK studio_dashboards)',
+    user_id: 'NgườI nhận ấn bản (FK users) — dữ liệu render theo quyền người này',
+    label: 'Tên gợi nhớ của đăng ký',
+    frequency: 'Tần suất: DAILY (hằng ngày) | WEEKLY (thứ Hai) | MONTHLY (mùng 1)',
+    hour_of_day: 'Giờ phát hành (giờ máy chủ, 0–23)',
+    active: 'Còn hiệu lực không',
+    last_run_at: 'Lần phát hành gần nhất',
+    next_run_at: 'Lần phát hành kế tiếp (tác vụ rà theo cột này)',
+    last_status: 'Kết quả lần chạy cuối: PENDING | SUCCESS | FAILED',
+    last_error: 'Thông điệp lỗi lần chạy cuối',
+    run_count: 'Số lần đã phát hành thành công',
+    created_at: 'Ngày tạo',
+    updated_at: 'Cập nhật cuối',
+  },
+
+  studio_subscription_files: {
+    _table: 'Ấn bản Excel đã phát hành của các đăng ký Studio',
+    id: 'Khoá chính',
+    subscription_id: 'Đăng ký sở hữu (FK studio_subscriptions)',
+    user_id: 'Chủ nhân file (FK users)',
+    page_id: 'Trang Studio nguồn',
+    page_name: 'Tên trang tại thờI điểm xuất',
+    file_name: 'Tên tệp Excel',
+    file_path: 'Đường dẫn tương đối trong thư mục kết xuất',
+    size_bytes: 'Kích thước tệp (byte)',
+    trigger: 'Nguồn phát hành: queue (theo lịch) | manual (chạy thử)',
+    created_at: 'Thời điểm xuất',
+  },
 };
 
 /** Ghi chú CHUNG theo tên cột — áp dụng cho mọi bảng khi cột chưa có ghi chú riêng */

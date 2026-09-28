@@ -9,6 +9,7 @@
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  BellRing,
   Check,
   Copy,
   Pencil,
@@ -25,6 +26,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input, Label, Select } from '@/components/ui/input';
 import { Badge } from '@/components/ui/card';
 import { useAuth } from '@/lib/auth';
+import { apiFetch } from '@/lib/api';
 import {
   BUILTIN_WIDGETS,
   newWidgetId,
@@ -40,6 +42,7 @@ import {
 import { RealtimeDot, useRealtimeEvent } from '@/lib/realtime';
 import { SOURCE_REALTIME_TOPIC } from '@/lib/studio';
 import { StudioCanvas } from './studio-canvas';
+import { SubscriptionsDialog } from './subscriptions-dialog';
 import { WidgetConfigDialog } from './widget-config-dialog';
 
 /* ---------------------------------------------------------------- helpers */
@@ -134,9 +137,11 @@ export interface StudioPageFrameProps {
   onNavigate?: (id: number) => void;
   /** Cho phép xoá trang này không (backend vẫn kiểm lại) */
   allowDelete?: boolean;
+  /** Mở ngay dialog ấn bản định kỳ (từ link thông báo) */
+  autoOpenSubscriptions?: boolean;
 }
 
-export function StudioPageFrame({ page, pages, sources, vocabulary, onNavigate, allowDelete = true }: StudioPageFrameProps) {
+export function StudioPageFrame({ page, pages, sources, vocabulary, onNavigate, allowDelete = true, autoOpenSubscriptions = false }: StudioPageFrameProps) {
   const user = useAuth((s) => s.user);
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -145,6 +150,7 @@ export function StudioPageFrame({ page, pages, sources, vocabulary, onNavigate, 
   const [draft, setDraft] = useState<StudioWidget[]>(page.layout.widgets);
   const [configWidget, setConfigWidget] = useState<StudioWidget | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [subsOpen, setSubsOpen] = useState(autoOpenSubscriptions);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -229,6 +235,14 @@ export function StudioPageFrame({ page, pages, sources, vocabulary, onNavigate, 
         <RealtimeDot className="ml-1" />
         <div className="flex-1" />
 
+        <Button
+          variant="outline"
+          title="Nhận Excel của trang này theo lịch (ấn bản định kỳ)"
+          onClick={() => setSubsOpen(true)}
+        >
+          <BellRing className="size-4" /> Ấn bản
+        </Button>
+
         {canManage ? (
           editing ? (
             <>
@@ -264,7 +278,7 @@ export function StudioPageFrame({ page, pages, sources, vocabulary, onNavigate, 
                 </Button>
               ) : null}
               {canEditPage ? (
-                <Button variant="outline" onClick={() => setRenameOpen(true)}>Đổi tên/mô tả</Button>
+                <Button variant="outline" onClick={() => setRenameOpen(true)}>Thông tin trang</Button>
               ) : null}
               {canEditPage && allowDelete ? (
                 <Button
@@ -315,6 +329,8 @@ export function StudioPageFrame({ page, pages, sources, vocabulary, onNavigate, 
         />
       ) : null}
 
+      <SubscriptionsDialog open={subsOpen} onClose={() => setSubsOpen(false)} page={page} />
+
       {/* Đổi tên/mô tả */}
       <RenameDialog
         open={renameOpen}
@@ -330,12 +346,32 @@ export function StudioPageFrame({ page, pages, sources, vocabulary, onNavigate, 
 }
 
 function RenameDialog({ open, page, onClose, onSaved }: { open: boolean; page: StudioPage; onClose: () => void; onSaved: () => void }) {
+  const user = useAuth((s) => s.user);
+  const isAdmin = !!user?.isSuperAdmin || (user?.roles ?? []).includes('ADMIN');
   const [name, setName] = useState(page.name);
   const [description, setDescription] = useState(page.description);
+  const [scope, setScope] = useState<StudioPage['scope']>(page.scope);
+  const [roleCode, setRoleCode] = useState(page.roleCode);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const roles = useQuery({
+    queryKey: ['roles', 'for-studio'],
+    queryFn: () => apiFetch<{ items: { code: string; name: string }[] }>('/roles?pageSize=100'),
+    enabled: open && isAdmin,
+    staleTime: 5 * 60_000,
+  });
+
   useEffect(() => {
-    if (open) { setName(page.name); setDescription(page.description); }
+    if (open) {
+      setName(page.name);
+      setDescription(page.description);
+      setScope(page.scope);
+      setRoleCode(page.roleCode);
+      setError('');
+    }
   }, [open, page]);
+
   return (
     <Dialog
       open={open}
@@ -345,12 +381,19 @@ function RenameDialog({ open, page, onClose, onSaved }: { open: boolean; page: S
         <>
           <Button variant="ghost" onClick={onClose}>Huỷ</Button>
           <Button
-            disabled={busy || !name.trim()}
+            disabled={busy || !name.trim() || (scope === 'ROLE' && !roleCode)}
             onClick={async () => {
               setBusy(true);
+              setError('');
               try {
-                await studioApi.updatePage(page.id, { name: name.trim(), description });
+                await studioApi.updatePage(page.id, {
+                  name: name.trim(),
+                  description,
+                  ...(isAdmin && scope !== page.scope ? { scope, roleCode } : {}),
+                });
                 onSaved();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'Lưu thất bại');
               } finally {
                 setBusy(false);
               }
@@ -362,6 +405,9 @@ function RenameDialog({ open, page, onClose, onSaved }: { open: boolean; page: S
       }
     >
       <div className="space-y-3">
+        {error ? (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+        ) : null}
         <div>
           <Label>Tên trang</Label>
           <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
@@ -370,6 +416,34 @@ function RenameDialog({ open, page, onClose, onSaved }: { open: boolean; page: S
           <Label>Mô tả</Label>
           <Input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
         </div>
+        {isAdmin ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Phạm vi chia sẻ</Label>
+              <Select value={scope} onChange={(e) => setScope(e.target.value as StudioPage['scope'])}>
+                <option value="PERSONAL">Cá nhân (riêng tôi)</option>
+                <option value="ROLE">Theo vai trò</option>
+                <option value="SYSTEM">Hệ thống (toàn bộ)</option>
+              </Select>
+            </div>
+            {scope === 'ROLE' ? (
+              <div>
+                <Label>Vai trò</Label>
+                <Select value={roleCode} onChange={(e) => setRoleCode(e.target.value)}>
+                  <option value="">— chọn vai trò —</option>
+                  {(roles.data?.items ?? []).map((r) => (
+                    <option key={r.code} value={r.code}>{r.name}</option>
+                  ))}
+                </Select>
+              </div>
+            ) : <div />}
+          </div>
+        ) : null}
+        {isAdmin && scope !== page.scope ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Đổi phạm vi sẽ {scope === 'PERSONAL' ? 'gán trang về riêng bạn' : 'gỡ quyền sở hữu cá nhân'} — mọi người trong phạm vi mới sẽ thấy trang này.
+          </div>
+        ) : null}
       </div>
     </Dialog>
   );

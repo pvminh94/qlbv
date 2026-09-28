@@ -6,18 +6,26 @@
  * nguồn khai báo quyền xem + luật giới hạn phạm vi theo khoa của người dùng.
  */
 import { SQL, and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { AnyColumn } from 'drizzle-orm';
 import {
   assetCategories,
+  assetDepreciationLines,
+  assetDepreciationRuns,
+  assetInventories,
+  assetInventoryItems,
   assetTransactions,
   assets,
   auditLogs,
   departments,
   hsbaRequests,
+  jobRuns,
   reportEntries,
   reportRows,
   reportSections,
+  reportSnapshots,
   reportTemplates,
+  scheduledJobs,
   users,
   REQUEST_STATUS_LABELS,
 } from '../../db/schema';
@@ -67,6 +75,8 @@ export interface DataSourceDef {
   columns: SourceColumn[];
   /** Điều kiện nền (ví dụ loại bỏ bản ghi đã xoá mềm) */
   base?: SQL | undefined;
+  /** Cột mặc định khi xem danh sách bản ghi gốc (drill-down); bỏ trống = mọi cột */
+  recordDefault?: string[];
   /** Điều kiện phạm vi khoa (trả undefined = toàn viện) */
   scope?: (user: AccessContext) => SQL | undefined;
 }
@@ -309,6 +319,222 @@ const auditLogsSource: DataSourceDef = {
   ],
 };
 
+
+/* ----------------------------------------------------- Kiểm kê & khấu hao */
+
+const inventoryStatusOptions = [
+  { value: 'NHAP', label: 'Nháp' },
+  { value: 'DANG_KIEM_KE', label: 'Đang kiểm kê' },
+  { value: 'CHO_DUYET', label: 'Chờ duyệt' },
+  { value: 'HOAN_TAT', label: 'Hoàn tất' },
+  { value: 'DA_HUY', label: 'Đã huỷ' },
+];
+
+const assetInventoriesSource: DataSourceDef = {
+  key: 'asset-inventories',
+  name: 'Đợt kiểm kê',
+  module: 'ASSET',
+  description: 'Các đợt kiểm kê tài sản: trạng thái tiến độ, ngày chốt sổ sách, kết luận',
+  permission: 'asset.inventory.view',
+  dateDefault: 'createdAt',
+  from: assetInventories,
+  recordDefault: ['code', 'name', 'status', 'plannedDate', 'snapshotAt', 'completedAt', 'createdByName'],
+  columns: [
+    col({ key: 'id', label: 'ID', type: 'number', expr: assetInventories.id, numeric: true, groupable: false }),
+    col({ key: 'code', label: 'Mã đợt', type: 'text', expr: assetInventories.code }),
+    col({ key: 'name', label: 'Tên đợt kiểm kê', type: 'text', expr: assetInventories.name }),
+    col({ key: 'status', label: 'Trạng thái', type: 'enum', expr: assetInventories.status, options: inventoryStatusOptions }),
+    col({ key: 'plannedDate', label: 'Ngày dự kiến', type: 'date', expr: assetInventories.plannedDate }),
+    col({ key: 'snapshotAt', label: 'Chốt sổ sách lúc', type: 'datetime', expr: assetInventories.snapshotAt }),
+    col({ key: 'completedAt', label: 'Hoàn tất lúc', type: 'datetime', expr: assetInventories.completedAt }),
+    col({ key: 'createdByName', label: 'Người tạo', type: 'text', expr: assetInventories.createdByName }),
+    col({ key: 'createdAt', label: 'Ngày tạo', type: 'datetime', expr: assetInventories.createdAt }),
+  ],
+};
+
+/* Kết quả kiểm kê từng tài sản (sổ sách vs thực tế) */
+const invBookDept = alias(departments, 'inv_book_dept');
+const invActualDept = alias(departments, 'inv_actual_dept');
+
+const inventoryResultOptions = [
+  { value: 'KHOP', label: 'Khớp' },
+  { value: 'SAI_VI_TRI', label: 'Sai vị trí' },
+  { value: 'SAI_TINH_TRANG', label: 'Sai tình trạng' },
+  { value: 'THIEU', label: 'Thiếu' },
+  { value: 'THUA', label: 'Thừa' },
+  { value: 'KHONG_RO', label: 'Không rõ' },
+];
+const inventoryCheckOptions = [
+  { value: 'CHUA_KIEM', label: 'Chưa kiểm' },
+  { value: 'CO', label: 'Đã thấy' },
+  { value: 'KHONG_THAY', label: 'Không thấy' },
+];
+
+const assetInventoryItemsSource: DataSourceDef = {
+  key: 'asset-inventory-items',
+  name: 'Kết quả kiểm kê chi tiết',
+  module: 'ASSET',
+  description: 'Từng tài sản trong đợt kiểm kê: sổ sách vs thực tế, kết quả khớp/lệch, xử lý',
+  permission: 'asset.inventory.view',
+  dateDefault: 'checkedAt',
+  from: assetInventoryItems,
+  joins: [
+    { table: assetInventories, on: eq(assetInventories.id, assetInventoryItems.inventoryId) },
+    { table: assets, on: eq(assets.id, assetInventoryItems.assetId) },
+    { table: invBookDept, on: eq(invBookDept.id, assetInventoryItems.bookDepartmentId) },
+    { table: invActualDept, on: eq(invActualDept.id, assetInventoryItems.actualDepartmentId) },
+  ],
+  recordDefault: ['inventoryName', 'assetCode', 'assetName', 'result', 'bookDeptName', 'actualDeptName', 'checkedAt', 'checkedByName'],
+  columns: [
+    col({ key: 'id', label: 'ID', type: 'number', expr: assetInventoryItems.id, numeric: true, groupable: false }),
+    col({ key: 'inventoryCode', label: 'Mã đợt kiểm kê', type: 'text', expr: assetInventories.code }),
+    col({ key: 'inventoryName', label: 'Đợt kiểm kê', type: 'text', expr: assetInventories.name }),
+    col({
+      key: 'assetCode', label: 'Mã tài sản', type: 'text',
+      expr: sql<string>`coalesce(${assets.code}, ${assetInventoryItems.scannedCode}, '')`,
+    }),
+    col({
+      key: 'assetName', label: 'Tên tài sản', type: 'text',
+      expr: sql<string>`coalesce(${assets.name}, '(tài sản thừa — chưa có hồ sơ)')`,
+    }),
+    col({ key: 'checkState', label: 'Trạng thái kiểm', type: 'enum', expr: assetInventoryItems.checkState, options: inventoryCheckOptions }),
+    col({
+      key: 'result', label: 'Kết quả', type: 'enum', expr: assetInventoryItems.result,
+      options: [{ value: '', label: 'Chưa kiểm' }, ...inventoryResultOptions],
+    }),
+    col({ key: 'expected', label: 'Trong sổ sách', type: 'boolean', expr: assetInventoryItems.expected, groupable: false }),
+    col({ key: 'bookDeptName', label: 'Khoa/phòng (sổ sách)', type: 'text', expr: invBookDept.name }),
+    col({ key: 'actualDeptName', label: 'Khoa/phòng (thực tế)', type: 'text', expr: invActualDept.name }),
+    col({ key: 'bookCondition', label: 'Tình trạng sổ sách', type: 'enum', expr: sql<string>`nullif(${assetInventoryItems.bookCondition}, '')`, options: assetConditionOptions }),
+    col({ key: 'actualCondition', label: 'Tình trạng thực tế', type: 'enum', expr: sql<string>`nullif(${assetInventoryItems.actualCondition}, '')`, options: assetConditionOptions }),
+    col({ key: 'bookValue', label: 'Giá trị còn lại (sổ sách)', type: 'number', expr: assetInventoryItems.bookValue, numeric: true, groupable: false }),
+    col({ key: 'checkedAt', label: 'Kiểm lúc', type: 'datetime', expr: assetInventoryItems.checkedAt }),
+    col({ key: 'checkedByName', label: 'Người kiểm', type: 'text', expr: assetInventoryItems.checkedByName }),
+  ],
+};
+
+/* Chi tiết khấu hao / hao mòn từng tài sản theo kỳ */
+const deprDept = alias(departments, 'depr_dept');
+
+const assetDepreciationLinesSource: DataSourceDef = {
+  key: 'asset-depreciation-lines',
+  name: 'Khấu hao/hao mòn chi tiết',
+  module: 'ASSET',
+  description: 'Dòng khấu hao (hao mòn) của từng tài sản theo kỳ đã chốt — tra soát số tiền từng tài sản',
+  permission: 'asset.depreciation.view',
+  dateDefault: 'runCreatedAt',
+  from: assetDepreciationLines,
+  joins: [
+    { table: assetDepreciationRuns, on: eq(assetDepreciationRuns.id, assetDepreciationLines.runId) },
+    { table: assets, on: eq(assets.id, assetDepreciationLines.assetId) },
+    { table: deprDept, on: eq(deprDept.id, assetDepreciationLines.departmentId) },
+    { table: assetCategories, on: eq(assetCategories.id, assetDepreciationLines.categoryId) },
+  ],
+  base: eq(assetDepreciationRuns.status, 'DA_CHOT'),
+  recordDefault: ['period', 'assetCode', 'assetName', 'deptName', 'amount', 'accumulatedAfter', 'bookValueAfter'],
+  columns: [
+    col({ key: 'id', label: 'ID', type: 'number', expr: assetDepreciationLines.id, numeric: true, groupable: false }),
+    col({ key: 'period', label: 'Kỳ', type: 'text', expr: assetDepreciationRuns.period }),
+    col({
+      key: 'periodType', label: 'Loại kỳ', type: 'enum', expr: assetDepreciationRuns.periodType,
+      options: [
+        { value: 'MONTHLY', label: 'Tháng' },
+        { value: 'YEARLY', label: 'Năm' },
+      ],
+    }),
+    col({ key: 'assetCode', label: 'Mã tài sản', type: 'text', expr: assets.code }),
+    col({ key: 'assetName', label: 'Tên tài sản', type: 'text', expr: assets.name }),
+    col({ key: 'deptName', label: 'Khoa/phòng', type: 'text', expr: deprDept.name }),
+    col({ key: 'categoryName', label: 'Nhóm tài sản', type: 'text', expr: assetCategories.name }),
+    col({
+      key: 'method', label: 'Phương pháp', type: 'enum', expr: assetDepreciationLines.method,
+      options: [
+        { value: 'STRAIGHT_LINE_MONTHLY', label: 'Đường thẳng theo tháng' },
+        { value: 'STRAIGHT_LINE_YEARLY', label: 'Đường thẳng theo năm (TT23)' },
+        { value: 'DECLINING_BALANCE', label: 'Số dư giảm dần' },
+        { value: 'NONE', label: 'Không tính' },
+      ],
+    }),
+    col({ key: 'costBasis', label: 'Cơ sở tính', type: 'number', expr: assetDepreciationLines.costBasis, numeric: true, groupable: false }),
+    col({ key: 'amount', label: 'Số tiền khấu hao', type: 'number', expr: assetDepreciationLines.amount, numeric: true, groupable: false }),
+    col({ key: 'accumulatedAfter', label: 'Lũy kế sau kỳ', type: 'number', expr: assetDepreciationLines.accumulatedAfter, numeric: true, groupable: false }),
+    col({ key: 'bookValueAfter', label: 'Giá trị còn lại', type: 'number', expr: assetDepreciationLines.bookValueAfter, numeric: true, groupable: false }),
+    col({ key: 'runCreatedAt', label: 'Chốt kỳ lúc', type: 'datetime', expr: assetDepreciationRuns.createdAt }),
+  ],
+};
+
+/* ----------------------------------------------------- Báo cáo & tác vụ */
+
+const reportSnapshotsSource: DataSourceDef = {
+  key: 'report-snapshots',
+  name: 'Bản chốt kỳ báo cáo',
+  module: 'REPORT',
+  description: 'Các bản báo cáo đã chốt (snapshot) theo mẫu/khoa/kỳ — tra cứu lịch sử phê duyệt',
+  permission: 'report.view.view',
+  dateDefault: 'dateFrom',
+  from: reportSnapshots,
+  joins: [
+    { table: reportTemplates, on: eq(reportTemplates.id, reportSnapshots.templateId) },
+    { table: departments, on: eq(departments.id, reportSnapshots.departmentId) },
+  ],
+  recordDefault: ['title', 'templateName', 'departmentName', 'periodLabel', 'status', 'createdAt'],
+  columns: [
+    col({ key: 'id', label: 'ID', type: 'number', expr: reportSnapshots.id, numeric: true, groupable: false }),
+    col({ key: 'title', label: 'Tên bản chốt', type: 'text', expr: reportSnapshots.title }),
+    col({ key: 'templateName', label: 'Mẫu báo cáo', type: 'text', expr: reportTemplates.name }),
+    col({ key: 'departmentName', label: 'Khoa/phòng', type: 'text', expr: departments.name }),
+    col({ key: 'periodLabel', label: 'Kỳ báo cáo', type: 'text', expr: reportSnapshots.periodLabel }),
+    col({ key: 'dateFrom', label: 'Từ ngày', type: 'date', expr: reportSnapshots.dateFrom }),
+    col({ key: 'dateTo', label: 'Đến ngày', type: 'date', expr: reportSnapshots.dateTo }),
+    col({
+      key: 'status', label: 'Trạng thái', type: 'enum', expr: reportSnapshots.status,
+      options: [
+        { value: 'DRAFT', label: 'Nháp' },
+        { value: 'APPROVED', label: 'Đã duyệt' },
+        { value: 'LOCKED', label: 'Đã khoá' },
+      ],
+    }),
+    col({ key: 'lockedAt', label: 'Khoá lúc', type: 'datetime', expr: reportSnapshots.lockedAt }),
+    col({ key: 'createdAt', label: 'Ngày chốt', type: 'datetime', expr: reportSnapshots.createdAt }),
+  ],
+};
+
+const jobStatusOptions = [
+  { value: 'PENDING', label: 'Chờ xử lý' },
+  { value: 'RUNNING', label: 'Đang chạy' },
+  { value: 'SUCCESS', label: 'Thành công' },
+  { value: 'FAILED', label: 'Thất bại' },
+  { value: 'CANCELED', label: 'Đã huỷ' },
+];
+
+const jobRunsSource: DataSourceDef = {
+  key: 'job-runs',
+  name: 'Lượt chạy tác vụ định kỳ',
+  module: 'SYSTEM',
+  description: 'Lịch sử chạy các tác vụ nền (sao lưu, nhắc hạn, tổng hợp…) — giám sát sức khoẻ hệ thống',
+  permission: 'job.view',
+  dateDefault: 'startedAt',
+  from: jobRuns,
+  joins: [{ table: scheduledJobs, on: eq(scheduledJobs.id, jobRuns.jobId) }],
+  recordDefault: ['jobCode', 'jobName', 'status', 'trigger', 'startedAt', 'durationMs', 'message'],
+  columns: [
+    col({ key: 'id', label: 'ID', type: 'number', expr: jobRuns.id, numeric: true, groupable: false }),
+    col({ key: 'jobCode', label: 'Mã tác vụ', type: 'text', expr: jobRuns.jobCode }),
+    col({ key: 'jobName', label: 'Tên tác vụ', type: 'text', expr: scheduledJobs.name }),
+    col({ key: 'status', label: 'Kết quả', type: 'enum', expr: jobRuns.status, options: jobStatusOptions }),
+    col({
+      key: 'trigger', label: 'Cách chạy', type: 'enum', expr: jobRuns.trigger,
+      options: [
+        { value: 'queue', label: 'Theo lịch' },
+        { value: 'manual', label: 'Chạy tay' },
+      ],
+    }),
+    col({ key: 'startedAt', label: 'Bắt đầu', type: 'datetime', expr: jobRuns.startedAt }),
+    col({ key: 'durationMs', label: 'Thời gian (ms)', type: 'number', expr: jobRuns.durationMs, numeric: true, groupable: false }),
+    col({ key: 'message', label: 'Thông điệp', type: 'text', expr: jobRuns.message, groupable: false }),
+  ],
+};
+
 /* ------------------------------------------------------------- Registry */
 
 export const DATA_SOURCES: DataSourceDef[] = [
@@ -316,8 +542,13 @@ export const DATA_SOURCES: DataSourceDef[] = [
   reportEntriesSource,
   assetsSource,
   assetTransactionsSource,
+  assetInventoriesSource,
+  assetInventoryItemsSource,
+  assetDepreciationLinesSource,
+  reportSnapshotsSource,
   usersSource,
   auditLogsSource,
+  jobRunsSource,
 ];
 
 export function findDataSource(key: string): DataSourceDef | undefined {
@@ -334,6 +565,7 @@ export function describeSourcesFor(user: AccessContext) {
     module: s.module,
     description: s.description,
     dateDefault: s.dateDefault,
+    recordDefault: s.recordDefault ?? s.columns.map((c) => c.key),
     columns: s.columns.map((c) => ({
       key: c.key,
       label: c.label,

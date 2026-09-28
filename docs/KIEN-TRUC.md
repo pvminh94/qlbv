@@ -68,7 +68,38 @@ bắt buộc và danh sách trường/toán tử cho phép. `dataSpec` chỉ ch�
 trò. Không có SQL tự do từ client. Xuất Excel dùng ExcelJS stream qua
 `POST /studio/query/export`. Trang lưu ở 3 phạm vi (`SYSTEM/ROLE/PERSONAL`) trong
 `studio_pages` (xoá mềm, mã duy nhất theo phạm vi), mỗi phạm vi tối đa 1 trang mặc
-định — chọn theo độ ưu tiên cá nhân → vai trò → hệ thống.
+định — chọn theo độ ưu tiên cá nhân → vai trò → hệ thống. Quyền quản trị dùng
+`studio.{dashboard,report}.manage`; **tạo trang cá nhân (PERSONAL) chỉ cần quyền
+`.view`** — mọi người dùng đều tự dựng được bảng điều khiển/báo cáo riêng; đổi
+phạm vi sang ROLE/SYSTEM (giao diện "Thông tin trang") chỉ hiện cho quản trị.
+
+### Studio — drill-down tới bản ghi gốc (GĐ3b)
+
+Mọi ô dữ liệu (KPI, biểu đồ đường/cột/tròn, bảng) đều bấm được để mở hộp thoại
+**bản ghi gốc**: frontend dựng `dataSpec` records từ `dataSpec` tổng hợp của ô
+(`drilldown-shared.ts`) — xoá metrics, đổi `dimensions` thành danh sách cột bảng,
+giữ nguyên `filters`/`dateRange` (luôn kèm cả phạm vi bộ lọc trang), rồi cộng
+thêm bộ lọc theo điểm đã bấm (tên cột → giá trị, ánh xạ ngược qua nhãn hiển thị
+cứng như trạng thái phiếu). Hộp thoại gọi `/studio/query` với spec records, phân
+trang phía máy chủ (`page`/`pageSize`) và nút Excel (`/studio/query/export`).
+Vì đi qua query engine nên drill-down **kế thừa toàn bộ kiểm soát quyền/phạm vi**;
+ô bảng có sẵn phân trang/Excel bên trong hộp thoại.
+
+### Studio — ấn bản định kỳ (subscription)
+
+Bảng `studio_subscriptions` (người đăng ký × trang × tần suất × giờ) là lịch
+phát hành **file Excel của nguyên trang Studio** (mỗi ô dữ liệu = một sheet,
+theo đúng quyền/phạm vi của người đăng ký, dựng bằng query engine). Tác vụ
+định kỳ `STUDIO_SUBSCRIPTIONS` (seed, cron mỗi 5 phút, handler
+`studio.subscription-dispatch` — đăng ký **qua SchedulerService để được bọc
+"tracked"**, ghi `job_runs` + trạng thái tác vụ) rà các bản ghi `nextRunAt ≤ now`,
+dựng file vào `storage.exportsDir/studio/`, lưu siêu dữ liệu ở
+`studio_subscription_files` rồi gửi thông báo thành công/thất bại; link thông
+báo mở lại đúng màn hình nguồn với hộp thoại Ấn bản tự bung
+(`/dashboard?an-ban=1`, `/bao-cao/tuy-bien/{id}?an-ban=1`). NgườI dùng quản lý
+đăng ký & tải ấn bản ở hộp thoại "Ấn bản" trên mọi trang Studio (nút luôn hiện
+cho người có quyền xem trang); giới hạn 10 đăng ký/người, download kiểm chủ sở
+hữu file.
 
 ### Realtime — SSE thay WebSocket
 

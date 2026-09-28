@@ -15,8 +15,10 @@ import {
   Settings2,
   Trash2,
 } from 'lucide-react';
-import type { StudioWidget } from '@/lib/studio';
+import type { StudioDataSpec, StudioWidget } from '@/lib/studio';
 import { WidgetBody, WIDGET_HEIGHTS } from './widget-view';
+import { buildDrilldownSpec, describeDrilldown, type DrillPoint } from './drilldown-shared';
+import { DrilldownDialog } from './drilldown-dialog';
 
 interface StudioCanvasProps {
   widgets: StudioWidget[];
@@ -36,6 +38,8 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
 export function StudioCanvas({ widgets, editing, onChange, onConfig }: StudioCanvasProps) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
+  /** Drill-down: spec records + widget nguồn (chỉ dùng ở chế độ xem) */
+  const [drill, setDrill] = useState<{ spec: StudioDataSpec; title: string; desc: string } | null>(null);
 
   const patch = (id: string, changes: Partial<StudioWidget>) => {
     onChange?.(widgets.map((w) => (w.id === id ? { ...w, ...changes } : w)));
@@ -180,12 +184,29 @@ export function StudioCanvas({ widgets, editing, onChange, onConfig }: StudioCan
                 </div>
               ) : null}
               <div className="min-h-0 flex-1 p-3">
-                <WidgetBody widget={widget} />
+                <WidgetBody
+                  widget={widget}
+                  onDrill={
+                    !editing && widget.dataSpec?.source && widget.type !== 'text' && widget.type !== 'builtin'
+                      ? (point: DrillPoint) => {
+                          const ds = buildDrilldownSpec(widget.dataSpec as StudioDataSpec, point);
+                          if (ds) setDrill({ spec: ds, title: widget.title || 'ô dữ liệu', desc: describeDrilldown(point) });
+                        }
+                      : undefined
+                  }
+                />
               </div>
             </div>
           </div>
         );
       })}
+      <DrilldownDialog
+        open={!!drill}
+        onClose={() => setDrill(null)}
+        title={`Bản ghi gốc — ${drill?.title ?? ''}`}
+        description={drill?.desc || 'Theo bộ lọc của ô'}
+        spec={drill?.spec ?? null}
+      />
     </div>
   );
 }

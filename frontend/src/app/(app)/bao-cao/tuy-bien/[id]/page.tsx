@@ -2,7 +2,7 @@
 
 /** Thiết kế / xem một báo cáo tuỳ biến theo id */
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/shared/page-header';
 import { Skeleton } from '@/components/ui/card';
 import { studioApi } from '@/lib/studio';
@@ -12,6 +12,8 @@ export default function CustomReportByIdPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = Number(params.id);
+  const searchParams = useSearchParams();
+  const openSubs = searchParams.get('an-ban') === '1';
 
   const meta = useStudioMeta();
   const page = useQuery({
@@ -42,6 +44,7 @@ export default function CustomReportByIdPage() {
         <StudioPageFrame
           page={page.data}
           pages={pages.data ?? [page.data]}
+          autoOpenSubscriptions={openSubs}
           sources={meta.data?.sources ?? []}
           vocabulary={meta.data?.vocabulary ?? { aggs: {}, filterOps: {}, datePresets: {}, buckets: {} } as never}
           onNavigate={(pid) => {

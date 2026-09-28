@@ -551,6 +551,15 @@ export const SCHEDULED_JOBS = [
     active: true,
   },
   {
+    code: 'STUDIO_SUBSCRIPTIONS',
+    name: 'Phát hành ấn bản Studio định kỳ',
+    description: 'Mỗi 5 phút rà các đăng ký ấn bản (Excel) đến hạn của người dùng Studio, dựng file và gửi thông báo tải về',
+    handler: 'studio.subscription-dispatch',
+    cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *',
+    payload: {},
+    active: true,
+  },
+  {
     code: 'DON_TEP_QUA_HAN',
     name: 'Dọn tệp kết xuất quá hạn',
     description: 'Xoá tệp kết xuất và sao lưu cũ hơn số ngày lưu trữ (mặc định 30 ngày)',

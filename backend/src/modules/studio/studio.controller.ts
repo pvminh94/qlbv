@@ -7,7 +7,7 @@
  */
 import {
   Body, Controller, Delete, ForbiddenException, Get, HttpCode, Param, ParseIntPipe,
-  Post, Put, Query, Res, StreamableFile,
+  Patch, Post, Put, Query, Res, StreamableFile,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -18,6 +18,7 @@ import { StudioKind } from '../../db/schema';
 import { describeSourcesFor } from './studio-datasources';
 import { StudioQueryService } from './studio-query.service';
 import { StudioService, type StudioSavePayload } from './studio.service';
+import { StudioSubscriptionsService } from './studio-subscriptions.service';
 import {
   STUDIO_AGG_LABELS, STUDIO_BUCKET_LABELS, STUDIO_DATE_PRESET_LABELS,
   STUDIO_FILTER_OP_LABELS, type StudioDataSpec,
@@ -47,6 +48,7 @@ export class StudioController {
   constructor(
     private readonly service: StudioService,
     private readonly engine: StudioQueryService,
+    private readonly subscriptions: StudioSubscriptionsService,
   ) {}
 
   /* ---------------------------------------------------- Siêu dữ liệu */
@@ -124,7 +126,9 @@ export class StudioController {
   @Post('pages')
   create(@Body() body: StudioSavePayload, @CurrentUser() user: AccessContext) {
     const k = kindOf(body.kind);
-    assertPerm(user, managePerm(k));
+    // Trang cá nhân: đủ quyền xem; trang dùng chung (vai trò/hệ thống): cần quyền quản lý
+    if (body.scope === 'SYSTEM' || body.scope === 'ROLE') assertPerm(user, managePerm(k));
+    else assertPerm(user, viewPerm(k));
     return this.service.create(user, { ...body, kind: k });
   }
 
@@ -135,14 +139,15 @@ export class StudioController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     const row = await this.service.get(user, id);
-    assertPerm(user, managePerm(row.kind));
+    // Chủ trang cá nhân (canEdit trong service) không bắt buộc quyền quản lý
+    if (row.scope !== 'PERSONAL' || row.ownerId !== user.id) assertPerm(user, managePerm(row.kind));
     return this.service.update(user, id, body);
   }
 
   @Delete('pages/:id')
   async remove(@CurrentUser() user: AccessContext, @Param('id', ParseIntPipe) id: number) {
     const row = await this.service.get(user, id);
-    assertPerm(user, managePerm(row.kind));
+    if (row.scope !== 'PERSONAL' || row.ownerId !== user.id) assertPerm(user, managePerm(row.kind));
     return this.service.remove(user, id);
   }
 
@@ -158,5 +163,60 @@ export class StudioController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.service.setDefault(user, id, body?.value !== false);
+  }
+
+  /* ------------------------------------------- Ấn bản định kỳ (subscription) */
+
+  @Get('subscriptions')
+  @ApiOperation({ summary: 'Đăng ký ấn bản định kỳ của tôi' })
+  listSubs(@CurrentUser() user: AccessContext) {
+    return this.subscriptions.listMine(user);
+  }
+
+  @Post('subscriptions')
+  createSub(@Body() body: { pageId?: number; label?: string; frequency?: string; hourOfDay?: number }, @CurrentUser() user: AccessContext) {
+    return this.subscriptions.create(user, body);
+  }
+
+  @Patch('subscriptions/:id')
+  updateSub(
+    @Body() body: { label?: string; frequency?: string; hourOfDay?: number; active?: boolean },
+    @CurrentUser() user: AccessContext,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.subscriptions.update(user, id, body);
+  }
+
+  @Delete('subscriptions/:id')
+  removeSub(@CurrentUser() user: AccessContext, @Param('id', ParseIntPipe) id: number) {
+    return this.subscriptions.remove(user, id);
+  }
+
+  @Post('subscriptions/:id/run')
+  @ApiOperation({ summary: 'Phát hành thử ngay (không đổi lịch định kỳ)' })
+  runSub(@CurrentUser() user: AccessContext, @Param('id', ParseIntPipe) id: number) {
+    return this.subscriptions.runNow(user, id);
+  }
+
+  @Get('subscriptions/files')
+  @ApiOperation({ summary: 'Ấn bản đã phát hành cho tôi (mới nhất)' })
+  subFiles(@CurrentUser() user: AccessContext) {
+    return this.subscriptions.listFiles(user);
+  }
+
+  @Get('subscriptions/files/:id/download')
+  @ApiOperation({ summary: 'Tải ấn bản Excel' })
+  async downloadSubFile(
+    @CurrentUser() user: AccessContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const fs = await import('fs');
+    const file = await this.subscriptions.fileForDownload(user, id);
+    res.set({
+      'Content-Type': XLSX,
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(file.fileName)}"`,
+    });
+    return new StreamableFile(fs.createReadStream(file.abs));
   }
 }

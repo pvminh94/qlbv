@@ -20,14 +20,22 @@ export interface StudioDimension { field: string; bucket?: StudioBucket }
 export interface StudioFilter { field: string; op: StudioFilterOp; value?: unknown }
 export interface StudioDateRange { field?: string; preset?: StudioDatePreset; from?: string; to?: string }
 
+export type StudioQueryMode = 'aggregate' | 'records';
+
 export interface StudioDataSpec {
   source: string;
-  metrics: StudioMetric[];
+  /** aggregate (mặc định) cho biểu đồ/bảng · records = bản ghi gốc (drill-down) */
+  mode?: StudioQueryMode;
+  metrics?: StudioMetric[];
   dimensions?: StudioDimension[];
   filters?: StudioFilter[];
   dateRange?: StudioDateRange;
   orderBy?: { key: string; dir: 'asc' | 'desc' }[];
   limit?: number;
+  /** records: bỏ qua N dòng đầu (phân trang) */
+  offset?: number;
+  /** records: chọn cột hiển thị (mặc định theo nguồn) */
+  fields?: string[];
 }
 
 export type StudioWidgetType =
@@ -82,6 +90,8 @@ export interface StudioSourceMeta {
   module: string;
   description: string;
   dateDefault?: string;
+  /** Cột mặc định khi xem bản ghi gốc (drill-down) */
+  recordDefault: string[];
   columns: StudioSourceColumnMeta[];
 }
 
@@ -122,6 +132,46 @@ export const BUILTIN_WIDGETS: { key: string; label: string; description: string 
   { key: 'notifications', label: 'Thông báo của tôi', description: 'Thông báo chưa đọc' },
 ];
 
+
+/* ------------------------------------------- Ấn bản định kỳ (subscription) */
+
+export type StudioSubFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export const SUB_FREQUENCY_LABELS: Record<StudioSubFrequency, string> = {
+  DAILY: 'Hằng ngày',
+  WEEKLY: 'Hằng tuần (thứ Hai)',
+  MONTHLY: 'Hằng tháng (ngày mùng 1)',
+};
+
+export interface StudioSubscription {
+  id: number;
+  pageId: number;
+  pageName: string;
+  pageKind: StudioKind;
+  userId: number;
+  label: string;
+  frequency: StudioSubFrequency;
+  hourOfDay: number;
+  active: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  lastStatus: string;
+  lastError: string;
+  runCount: number;
+  createdAt: string;
+}
+
+export interface StudioSubscriptionFile {
+  id: number;
+  subscriptionId: number;
+  pageId: number;
+  pageName: string;
+  fileName: string;
+  sizeBytes: number;
+  trigger: 'queue' | 'manual';
+  createdAt: string;
+}
+
 /* -------------------------------------------------------------- Gọi API */
 
 import { apiFetch } from './api';
@@ -142,6 +192,15 @@ export const studioApi = {
     apiFetch<StudioPage>(`/studio/pages/${id}/default`, { method: 'POST', body: { value } }),
   run: (spec: StudioDataSpec) =>
     apiFetch<StudioQueryResult>('/studio/query', { method: 'POST', body: spec }),
+  /* --- ấn bản định kỳ --- */
+  subscriptions: () => apiFetch<StudioSubscription[]>('/studio/subscriptions'),
+  createSubscription: (body: { pageId: number; label?: string; frequency: StudioSubFrequency; hourOfDay?: number }) =>
+    apiFetch<StudioSubscription>('/studio/subscriptions', { method: 'POST', body }),
+  updateSubscription: (id: number, body: Partial<Pick<StudioSubscription, 'label' | 'frequency' | 'hourOfDay' | 'active'>>) =>
+    apiFetch<StudioSubscription>(`/studio/subscriptions/${id}`, { method: 'PATCH', body }),
+  removeSubscription: (id: number) => apiFetch(`/studio/subscriptions/${id}`, { method: 'DELETE' }),
+  runSubscription: (id: number) => apiFetch<StudioSubscriptionFile>(`/studio/subscriptions/${id}/run`, { method: 'POST' }),
+  subscriptionFiles: () => apiFetch<StudioSubscriptionFile[]>('/studio/subscriptions/files'),
 };
 
 /* -------------------------------------------------------------- Tiện ích */
@@ -156,8 +215,13 @@ export const SOURCE_REALTIME_TOPIC: Record<string, string> = {
   'report-entries': 'report',
   assets: 'asset',
   'asset-transactions': 'asset',
+  'asset-inventories': 'asset',
+  'asset-inventory-items': 'asset',
+  'asset-depreciation-lines': 'asset',
+  'report-snapshots': 'report',
   users: 'system',
   'audit-logs': 'system',
+  'job-runs': 'system',
 };
 
 /** Khoảng ngày [from..to] liên tiếp (YYYY-MM-DD) cho tuỳ chọn fillGaps */
