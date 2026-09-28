@@ -36,7 +36,7 @@ import type {
   UserQueryDto,
 } from './dto/user.dto';
 
-const DEFAULT_RESET_PASSWORD = 'Qlbs@123456';
+const DEFAULT_RESET_PASSWORD = '1'; // Mật khẩu mặc định khi tạo/đặt lại tài khoản mà không nhập mật khẩu
 
 import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
 /** Trường lọc nâng cao của danh sách người dùng. */

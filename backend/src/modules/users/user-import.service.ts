@@ -29,7 +29,7 @@ import {
   type ParsedRow,
 } from './user-import.parser';
 
-export const DEFAULT_IMPORT_PASSWORD = 'Qlbs@123456';
+export const DEFAULT_IMPORT_PASSWORD = '1'; // Mật khẩu mặc định cho tài khoản nhập từ tệp khi ô mật khẩu để trống
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const USERNAME_RE = /^[a-z0-9._-]+$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

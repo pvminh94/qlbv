@@ -132,7 +132,7 @@ export class UserQueryDto extends AdvancedQueryDto {
 }
 
 export class ResetPasswordDto {
-  @ApiPropertyOptional({ description: 'Mật khẩu mới (bỏ trống = mặc định Qlbs@123456; độ dài tối thiểu theo cấu hình hệ thống)' })
+  @ApiPropertyOptional({ description: 'Mật khẩu mới (bỏ trống = mặc định "1"; độ dài tối thiểu theo cấu hình hệ thống)' })
   @IsOptional()
   @IsString()
   @MinLength(1, { message: 'Vui lòng nhập mật khẩu mới' })

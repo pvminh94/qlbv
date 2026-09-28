@@ -106,7 +106,7 @@ danh sách khoa chưa nhập số liệu trong kỳ.
 - Chỉ bắt buộc cột **Họ và tên**. Các cột khác (Tên đăng nhập, Chức danh, Mã khoa hoặc tên khoa, Thư điện tử, Điện thoại, Vai trò, Ghi chú, Mật khẩu, Mã nhân viên) có thể có hoặc không, thứ tự tuỳ ý, tên cột không phân biệt dấu/hoa thường.
 - Tên đăng nhập để trống → tự tạo từ họ tên: “Nguyễn Văn An” → `annv` (trùng thì `annv2`…). Nhập lại cùng tệp không tạo trùng.
 - Thư điện tử/điện thoại sai định dạng chỉ bị bỏ qua (cảnh báo), khoa không tìm thấy thì để trống khoa.
-- Tài khoản mới dùng mật khẩu `Qlbs@123456`, bắt buộc đổi khi đăng nhập lần đầu. Chọn “Ghi đè” để cập nhật tài khoản đã có (không đổi mật khẩu, ô trống không xoá dữ liệu cũ).
+- Tài khoản mới dùng mật khẩu mặc định `1`, bắt buộc đổi khi đăng nhập lần đầu. Chọn “Ghi đè” để cập nhật tài khoản đã có (không đổi mật khẩu, ô trống không xoá dữ liệu cũ).
 - Tệp CSV/TXT: UTF-8, UTF-16 (Excel “Unicode Text”) hoặc Windows-1258; phân cách bằng `,` `;` Tab hoặc `|`. Tệp `.xls` cũ cần lưu lại thành `.xlsx`. Tối đa 5000 dòng / 10 MB mỗi lần.
 
 ## 7b. Quản lý tài sản (vai trò `QL_TAI_SAN`; trưởng khoa xem & đề nghị)

@@ -190,7 +190,7 @@ export default function UsersPage() {
     { name: 'departmentId', label: 'Khoa công tác', type: 'select', options: (departments ?? []).map((d) => ({ value: d.id, label: `${'— '.repeat(Math.max(0, d.level - 1))}${d.name}` })) },
     { name: 'email', label: 'Thư điện tử', type: 'email', placeholder: 'Không bắt buộc' },
     { name: 'phone', label: 'Điện thoại', placeholder: 'Không bắt buộc' },
-    { name: 'password', label: 'Mật khẩu ban đầu', type: 'password', createOnly: true, hideInTable: true, help: 'Bỏ trống để dùng mật khẩu mặc định Qlbs@123456' },
+    { name: 'password', label: 'Mật khẩu ban đầu', type: 'password', createOnly: true, hideInTable: true, help: 'Bỏ trống để dùng mật khẩu mặc định "1"' },
     { name: 'mustChangePassword', label: 'Buộc đổi mật khẩu lần đầu', type: 'switch', defaultValue: true, hideInTable: true },
     { name: 'active', label: 'Đang làm việc', type: 'switch', defaultValue: true },
     { name: 'note', label: 'Ghi chú', type: 'textarea', hideInTable: true, placeholder: 'Không bắt buộc' },
