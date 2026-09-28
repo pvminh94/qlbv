@@ -17,12 +17,14 @@ import { departments, roles, scheduledJobs, users } from '../../db/schema';
 import type { CacheService } from '../../infra/cache/cache.service';
 import type { JobContext, JobHandler, JobResult } from '../../infra/queue/queue.service';
 import { runAssetDueReminder } from '../assets/asset-reminder';
+import type { RealtimeService } from '../realtime/realtime.service';
 import { backupFileName, formatBytes, rotateBackups, writeBackup, type SqlExecutor } from '../backups/backup-writer';
 
 export interface HandlerDeps {
   db: DbService;
   cache: CacheService;
   logger: Logger;
+  realtime?: RealtimeService;
 }
 
 export function builtinHandlers(deps: HandlerDeps): Map<string, JobHandler> {
@@ -212,7 +214,7 @@ export function builtinHandlers(deps: HandlerDeps): Map<string, JobHandler> {
 
   handlers.set('asset.due-reminder', async (ctx?: JobContext): Promise<JobResult> => {
     const days = Number((ctx?.payload as { days?: unknown } | undefined)?.days ?? 15);
-    return runAssetDueReminder(db, Number.isFinite(days) ? days : 15);
+    return runAssetDueReminder(db, Number.isFinite(days) ? days : 15, deps.realtime);
   });
 
   /* ------------------------------------------------------------ Hàng đợi */

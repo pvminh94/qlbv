@@ -21,6 +21,7 @@ import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '
 import { CacheService } from '../../infra/cache/cache.service';
 import type { JobContext, JobHandler, JobResult } from '../../infra/queue/queue.service';
 import { QueueService } from '../../infra/queue/queue.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { builtinHandlers, registerBuiltinHandlers } from './handlers';
 
 export interface UpsertJobDto {
@@ -70,6 +71,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly db: DbService,
     private readonly cache: CacheService,
     private readonly queue: QueueService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -78,6 +80,7 @@ export class SchedulerService implements OnModuleInit {
       db: this.db,
       cache: this.cache,
       logger: this.logger,
+      realtime: this.realtime,
     });
 
     // 2. Bọc mỗi hàm để tự động ghi lịch sử chạy và cập nhật trạng thái tác vụ
@@ -418,7 +421,7 @@ export class SchedulerService implements OnModuleInit {
 
   /** Danh mục hàm xử lý có sẵn — gợi ý khi tạo tác vụ mới */
   availableHandlers() {
-    return [...builtinHandlers({ db: this.db, cache: this.cache, logger: this.logger }).keys()].map(
+    return [...builtinHandlers({ db: this.db, cache: this.cache, logger: this.logger, realtime: this.realtime }).keys()].map(
       (code) => ({
         code,
         label: HANDLER_LABELS[code] ?? code,

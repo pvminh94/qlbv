@@ -92,6 +92,10 @@ không có phần nào bị cứng trong mã nguồn.
 | `backup.restore` | Phục hồi từ bản sao lưu |
 | `file.upload` | Tải tệp lên |
 | `file.delete` | Xoá tệp đã tải lên |
+| `studio.dashboard.view` | Xem & tự tạo bảng điều khiển của riêng mình, nhân bản trang hệ thống |
+| `studio.dashboard.manage` | Tạo/sửa/xoá bảng điều khiển **phạm vi hệ thống/vai trò** (cho cả viện xem) |
+| `studio.report.view` | Vào trang Báo cáo tuỳ biến, tự tạo báo cáo cá nhân, xuất Excel theo quyền nguồn |
+| `studio.report.manage` | Tạo/sửa báo cáo tuỳ biến **phạm vi hệ thống/vai trò** |
 | `asset.view` | Xem tài sản (danh sách, hồ sơ, dòng thời gian — theo phạm vi khoa) |
 | `asset.view-all` | Xem tài sản toàn viện (bỏ qua giới hạn khoa) |
 | `asset.create` | Thêm tài sản (kể cả thêm cả lô nhiều chiếc) |

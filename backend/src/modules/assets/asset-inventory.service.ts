@@ -40,6 +40,7 @@ import {
 } from '../../db/schema';
 import { renderPrintDocument } from '../../infra/rendering/pdf-renderer';
 import { SettingsService } from '../settings/settings.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { normalizeVN } from '../hsba/hsba.service';
 import {
   ACTIVE_STATUSES,
@@ -114,7 +115,14 @@ export class AssetInventoryService {
     private readonly assetsService: AssetsService,
     private readonly txService: AssetTransactionsService,
     private readonly settings: SettingsService,
+    private readonly realtime: RealtimeService,
   ) {}
+
+  /** GĐ3: realtime — đợt kiểm kê có thay đổi (tiến độ quét, hoàn tất…) */
+  private ping(type: string, data: Record<string, unknown>, userIds?: number[]) {
+    if (userIds?.length) this.realtime.publish({ topic: 'notification', type: 'new', userIds });
+    this.realtime.publish({ topic: 'asset', type, permission: 'asset.inventory.view', data });
+  }
 
   meta() {
     return { statuses: INVENTORY_STATUS, results: INVENTORY_RESULT, resolutions: INVENTORY_RESOLUTION, conditions: ASSET_CONDITION, groups: ASSET_GROUP };
@@ -694,6 +702,8 @@ export class AssetInventoryService {
     const info = itemIds.length ? (await this.items(id, { all: true } as InventoryItemsQuery, user)).items.filter((i) => itemIds.includes(i.id)) : [];
     const byId = new Map(info.map((i) => [i.id, i]));
     const [stats] = await this.statsSql([id]);
+    // GĐ3: các màn hình đang mở đợt kiểm kê tự cập nhật tiến độ (có gom nhịp ở client)
+    this.ping('inventory.progress', { id, code: inv.code }, undefined);
     return {
       results: results.map((r) => ({ ...r, item: byId.get(Number(r.itemId)) ?? null })),
       stats: seeExpected ? stats : { found: stats?.found ?? 0 },
@@ -830,6 +840,7 @@ export class AssetInventoryService {
         .where(eq(assetInventories.id, id));
     });
     await this.notifyApprovers(inv, user);
+    this.ping('inventory.finished', { id, code: inv.code });
     return this.detail(id, user);
   }
 
@@ -986,7 +997,9 @@ export class AssetInventoryService {
         .insert(notifications)
         .values({ userId: inv.createdBy, title: `Đã duyệt kết quả kiểm kê ${inv.code}`, body: `${inv.name} — duyệt bởi ${user.fullName}.`, level: 'SUCCESS', link: `/tai-san/kiem-ke/${id}`, module: 'ASSET', entityId: String(id) })
         .catch(() => undefined);
+      this.realtime.publish({ topic: 'notification', type: 'new', userIds: [inv.createdBy] });
     }
+    this.ping('inventory.completed', { id, code: inv.code });
     return { ...(await this.detail(id, user)), summary };
   }
 

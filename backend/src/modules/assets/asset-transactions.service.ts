@@ -24,6 +24,7 @@ import {
 } from '../../db/schema';
 import { ASSET_CONDITION, ASSET_STATUS, TX_STATUS, TX_TYPES } from './asset-constants';
 import { addMonthsISO, AssetsService, todayISO, type AssetRow } from './assets.service';
+import { RealtimeService } from '../realtime/realtime.service';
 
 interface ItemInput {
   assetId: number;
@@ -55,7 +56,16 @@ export class AssetTransactionsService {
   constructor(
     private readonly db: DbService,
     private readonly assetsService: AssetsService,
+    private readonly realtime: RealtimeService,
   ) {}
+
+  /** GĐ3: đẩy sự kiện realtime (chuông thông báo + làm mới dashboard/danh sách) */
+  private pingChanged(type: string, data: Record<string, unknown>, notifyUserIds?: number[]) {
+    if (notifyUserIds?.length) {
+      this.realtime.publish({ topic: 'notification', type: 'new', userIds: notifyUserIds });
+    }
+    this.realtime.publish({ topic: 'asset', type, permission: 'asset.view', data });
+  }
 
   meta() {
     return { types: TX_TYPES, statuses: TX_STATUS, conditions: ASSET_CONDITION, assetStatuses: ASSET_STATUS };
@@ -388,6 +398,7 @@ export class AssetTransactionsService {
     await this.validateItems(this.db.db, t.type, items.map((i) => ({ assetId: i.assetId, amount: i.amount })), user, id);
     await this.db.db.update(assetTransactions).set({ status: 'CHO_DUYET', submittedAt: new Date(), rejectReason: '', updatedAt: new Date() }).where(eq(assetTransactions.id, id));
     await this.notifyApprovers(t.id, t.code, TX_TYPES[t.type].label, user);
+    this.pingChanged('transaction.submitted', { id, code: t.code });
     return this.detail(id, user);
   }
 
@@ -402,13 +413,16 @@ export class AssetTransactionsService {
         userId: t.createdBy, title: `Chứng từ ${t.code} bị từ chối`, body: `${user.fullName}: ${why}`, level: 'WARNING',
         link: `/tai-san/nghiep-vu/${id}`, module: 'ASSET', entityId: String(id),
       });
+      this.realtime.publish({ topic: 'notification', type: 'new', userIds: [t.createdBy] });
     }
+    this.pingChanged('transaction.rejected', { id, code: t.code });
     return this.detail(id, user);
   }
 
   async cancel(id: number, user: AccessContext) {
     await this.loadForAction(id, user, ['NHAP', 'CHO_DUYET', 'TU_CHOI']);
     await this.db.db.update(assetTransactions).set({ status: 'DA_HUY', updatedAt: new Date() }).where(eq(assetTransactions.id, id));
+    this.pingChanged('transaction.cancelled', { id });
     return this.detail(id, user);
   }
 
@@ -449,7 +463,9 @@ export class AssetTransactionsService {
         userId: result.createdBy, title: `Chứng từ ${result.code} đã được duyệt`, body: `${TX_TYPES[result.type].label} — ${user.fullName} đã duyệt.`, level: 'SUCCESS',
         link: `/tai-san/nghiep-vu/${id}`, module: 'ASSET', entityId: String(id),
       });
+      this.realtime.publish({ topic: 'notification', type: 'new', userIds: [result.createdBy] });
     }
+    this.pingChanged('transaction.approved', { id, code: result.code, txType: result.type }, undefined);
     return this.detail(id, user);
   }
 
@@ -546,6 +562,7 @@ export class AssetTransactionsService {
           link: `/tai-san/nghiep-vu/${txId}`, module: 'ASSET', entityId: String(txId),
         })),
       );
+      this.realtime.publish({ topic: 'notification', type: 'new', userIds: targets });
     } catch (e) {
       this.logger.warn(`Không gửi được thông báo duyệt: ${(e as Error).message}`);
     }

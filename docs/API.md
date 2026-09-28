@@ -215,6 +215,43 @@ Tổng **187** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 
 Tài nguyên hỗ trợ: `hsba`, `report-entries`, `print-templates`, `users`, `roles`, `departments`, `utilities`, `audit`.
 
+## Studio — bảng điều khiển & báo cáo tuỳ biến
+
+Query engine an toàn phía máy chủ: câu hỏi (`StudioDataSpec`) chỉ gồm tên **nguồn**
++ chỉ số/nhóm/lọc theo từ khoá cho phép (không SQL tự do), tự áp phạm vi dữ liệu
+theo vai trò. Nguồn nào yêu cầu quyền riêng (ví dụ `assets` cần `asset.view`,
+`hsba-requests` cần `hsba.request.view`) thì người thiếu quyền nhận `403`.
+
+| Phương thức | Đường dẫn | Mô tả | Quyền |
+|---|---|---|---|
+| `GET` | `/studio/sources` | Danh mục nguồn dữ liệu + trường + từ vựng lọc, đã lọc theo quyền người xem | đăng nhập |
+| `POST` | `/studio/query` | Chạy `dataSpec` → `{columns, rows}` (số liệu/bảng/biểu đồ) | theo nguồn |
+| `POST` | `/studio/query/export` | Chạy `dataSpec` rồi trả tệp **Excel** (.xlsx, ExcelJS) | theo nguồn |
+| `GET` | `/studio/pages?kind=DASHBOARD\|REPORT` | Trang của tôi + trang vai trò + trang hệ thống | `studio.*.view` |
+| `GET` | `/studio/pages/default?kind=…` | Trang mặc định theo độ ưu tiên: cá nhân → vai trò → hệ thống | `studio.*.view` |
+| `GET` | `/studio/pages/:id` | Chi tiết trang (chủ sở hữu/phạm vi được phép mới xem) | `studio.*.view` |
+| `POST` | `/studio/pages` | Tạo trang `{kind, scope: PERSONAL\|ROLE\|SYSTEM, layout{widgets[]}}` | `studio.*.view` (phạm vi SYSTEM cần `studio.*.manage`) |
+| `PUT` | `/studio/pages/:id` | Sửa tên/bố cục; chủ sở hữu sửa trang mình, `manage` sửa trang hệ thống | chủ/`manage` |
+| `DELETE` | `/studio/pages/:id` | Xoá mềm (không xoá được trang hệ thống mặc định) | chủ/`manage` |
+| `POST` | `/studio/pages/:id/duplicate` | Nhân bản thành bản "Của tôi" | `studio.*.view` |
+| `POST` | `/studio/pages/:id/default` | `{value}` đặt/bỏ mặc định (mỗi người/vai trò/phạm vi 1 trang) | chủ/`manage` |
+
+`StudioWidget.type`: `kpi, line, area, bar, barh, pie, donut, table, text, builtin`
+(builtin: `jobs` — tác vụ định kỳ, `activity` — hoạt động gần đây). Kích thước
+`w` = 2–12 cột, `h` = `S/M/L`. Ô dữ liệu tự tải lại khi có sự kiện realtime thuộc
+chủ đề của nguồn đó.
+
+## Realtime (SSE)
+
+| Phương thức | Đường dẫn | Mô tả |
+|---|---|---|
+| `GET` | `/realtime/stream?topics=hsba,notifications,assets&token=<JWT>` | Luồng **Server-Sent Events**: keep-alive 25s, gửi `{topic, event, data}` khi có thay đổi; chiếu theo phạm vi dữ liệu của người nhận (QUAN_TRỌNG: gửi JWT qua query vì `EventSource` không đặt được header — chỉ chấp nhận trên endpoint này) |
+| `GET` | `/realtime/stats` | Số kết nối đang mở theo chủ đề (quản trị) |
+
+Frontend gộp kết nối qua `RealtimeProvider`: một `EventSource` dùng chung, các
+component đăng ký `useRealtimeEvent(topic, cb)`; bảng điều khiển Studio ánh xạ
+nguồn → chủ đề để tự làm mới đúng ô.
+
 ## Quản lý tài sản
 
 | Phương thức | Đường dẫn | Mô tả | Quyền |
@@ -259,7 +296,7 @@ Tài nguyên hỗ trợ: `hsba`, `report-entries`, `print-templates`, `users`, `
 | `POST` | `/asset-inventories/scope-preview` | Đếm thử tài sản theo phạm vi `{scope}` | `asset.inventory.manage` |
 | `GET` | `/asset-inventories` | Danh sách đợt kiểm kê: `q, status` (nhiều, cách dấu phẩy) kèm tiến độ `stats` và `counts`; phạm vi nhìn theo khoa | `asset.inventory.view` \| `asset.inventory.scan` |
 | `POST` | `/asset-inventories` | Lập đợt `{name, scope{departmentIds,locationIds,categoryIds,groups,includeStore}, committee[], memberIds, blind, decisionNo, plannedDate, start?}` | `asset.inventory.manage` |
-| `GET` | `/asset-inventories/:id` | Chi tiết: stats, tiến độ theo khoa, ngườ quét, lượt quét gần, `can{…}` | liên quan đợt |
+| `GET` | `/asset-inventories/:id` | Chi tiết: stats, tiến độ theo khoa, người quét, lượt quét gần, `can{…}` | liên quan đợt |
 | `PUT` | `/asset-inventories/:id` | Sửa đợt (phạm vi chỉ sửa khi còn NHAP) | `asset.inventory.manage` |
 | `DELETE` | `/asset-inventories/:id` | Xoá đợt nháp | `asset.inventory.manage` |
 | `POST` | `/asset-inventories/:id/start` | Bắt đầu = chốt sổ sách snapshot theo phạm vi, thông báo phân công | `asset.inventory.manage` |
@@ -272,7 +309,7 @@ Tài nguyên hỗ trợ: `hsba`, `report-entries`, `print-templates`, `users`, `
 | `POST` | `/asset-inventories/:id/finish` | Khoá số liệu: chưa kiểm → Thiếu tự động, trình duyệt | `asset.inventory.manage` |
 | `POST` | `/asset-inventories/:id/reopen` | Mở lại (dòng Thiếu tự động quay về chưa kiểm) | `asset.inventory.manage` |
 | `POST` | `/asset-inventories/:id/resolve` | `{action: DIEU_CHUYEN\|BAO_MAT\|BAO_HONG\|GHI_NHAN, itemIds?, submit?}` lập chứng từ nháp/gửi duyệt | `asset.inventory.manage` |
-| `POST` | `/asset-inventories/:id/complete` | Duyệt hoàn tất: ghi `lastInventoryAt`, cập nhật tình trạng hồ sơ, dòng thờ gian | `asset.inventory.approve` |
+| `POST` | `/asset-inventories/:id/complete` | Duyệt hoàn tất: ghi `lastInventoryAt`, cập nhật tình trạng hồ sơ, dòng thời gian | `asset.inventory.approve` |
 | `POST` | `/asset-inventories/:id/cancel` | Huỷ đợt | `asset.inventory.manage` |
 | `GET` | `/asset-inventories/:id/export` | Excel kết quả (2 sheet) | xem được đợt (không mù) |
 | `GET` | `/asset-inventories/:id/print?onlyDiff=` | PDF biên bản kiểm kê (mẫu `BIEN_BAN_KIEM_KE`); `onlyDiff=true` chỉ phần chênh lệch | xem được đợt (không mù) |
@@ -284,4 +321,4 @@ Tài nguyên hỗ trợ: `hsba`, `report-entries`, `print-templates`, `users`, `
 
 > Kiểm kê — kết quả đối chiếu: `KHOP` khớp · `SAI_VI_TRI` sai khoa/vị trí · `SAI_TINH_TRANG` khác tình trạng · `THIEU` thiếu · `THUA` thừa · `KHONG_RO` chưa có hồ sơ. Trạng thái đợt: `NHAP → DANG_KIEM_KE → CHO_DUYET → HOAN_TAT` (+ `DA_HUY`).
 >
-> Tác vụ định kỳ `asset.due-reminder` (mã `NHAC_HAN_TAI_SAN`, 07:30 mỗi ngày): nhắc hạn kiểm định/bảo dưỡng/bảo hành cho ngườ quản lý tài sản (toàn viện) và trưởng khoa (khoa mình), tối đa 1 thông báo/ngườ/ngày; cấu hình `payload.days` (mặc định 15).
+> Tác vụ định kỳ `asset.due-reminder` (mã `NHAC_HAN_TAI_SAN`, 07:30 mỗi ngày): nhắc hạn kiểm định/bảo dưỡng/bảo hành cho người quản lý tài sản (toàn viện) và trưởng khoa (khoa mình), tối đa 1 thông báo/người/ngày; cấu hình `payload.days` (mặc định 15).

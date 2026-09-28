@@ -34,6 +34,7 @@ import type { AccessContext, ClientMeta } from '../../common/types/access-contex
 import { PrintingService } from '../printing/printing.service';
 import { CacheService } from '../../infra/cache/cache.service';
 import { QueueService } from '../../infra/queue/queue.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { formatVN } from '../../common/utils/date.util';
 import type {
   CreateRequestDto,
@@ -134,6 +135,7 @@ export class HsbaService {
     private readonly cache: CacheService,
     private readonly printing: PrintingService,
     private readonly queue: QueueService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /* ==================================================================== KÝ */
@@ -241,6 +243,9 @@ export class HsbaService {
 
   private async invalidateStats(): Promise<void> {
     await this.cache.delByPrefix('hsba:');
+    // GĐ3: đẩy sự kiện realtime — trang danh sách/dashboard tự tải lại (số liệu
+    // chi tiết vẫn qua API đã áp phạm vi, sự kiện chỉ mang tính "đánh thức")
+    this.realtime.publish({ topic: 'hsba', type: 'changed', permission: 'hsba.request.view' });
   }
 
   /* ============================================================== QUY TRÌNH */
@@ -792,6 +797,7 @@ export class HsbaService {
       return this.sign(created.id, {}, user, client);
     }
 
+    await this.invalidateStats();
     return this.findOne(created.id);
   }
 

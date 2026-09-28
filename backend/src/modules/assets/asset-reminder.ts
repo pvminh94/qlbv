@@ -8,10 +8,11 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { DbService } from '../../db/db.service';
 import { assets, departments, notifications, permissions, rolePermissions, userRoles, users } from '../../db/schema';
 import { ACTIVE_STATUSES } from './asset-constants';
+import type { RealtimeService } from '../realtime/realtime.service';
 
 const TITLE_PREFIX = 'Nhắc hạn thiết bị';
 
-export async function runAssetDueReminder(db: DbService, days = 15) {
+export async function runAssetDueReminder(db: DbService, days = 15, realtime?: RealtimeService) {
   const d = Math.min(365, Math.max(0, Math.trunc(days)));
   const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
   const rows = await db.db
@@ -82,6 +83,9 @@ export async function runAssetDueReminder(db: DbService, days = 15) {
       entityId: today,
     });
   }
-  if (values.length) await db.db.insert(notifications).values(values);
+  if (values.length) {
+    await db.db.insert(notifications).values(values);
+    realtime?.publish({ topic: 'notification', type: 'new', userIds: values.map((v) => v.userId) });
+  }
   return { message: `Đã gửi ${values.length} thông báo nhắc hạn — toàn viện: ${text(active)}`, sent: values.length, departments: active.length };
 }

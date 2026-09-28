@@ -11,6 +11,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import type { AccessContext } from '../../common/types/access-context';
 import { buildPage } from '../../common/dto/query.dto';
 import { DbService, type Executor, type Tx } from '../../db/db.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import {
   assetCategories,
   assetDepreciationLines,
@@ -135,7 +136,15 @@ export interface AssetListQuery {
 
 @Injectable()
 export class AssetsService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly realtime: RealtimeService,
+  ) {}
+
+  /** GĐ3: realtime — dữ liệu tài sản vừa thay đổi, các màn hình tự tải lại */
+  private pingChanged(type: string, data: Record<string, unknown> = {}) {
+    this.realtime.publish({ topic: 'asset', type, permission: 'asset.view', data });
+  }
 
   /* ------------------------------------------------------------ Phạm vi */
   canSeeAll(user: AccessContext) {
@@ -549,6 +558,7 @@ export class AssetsService {
       }
       return created;
     });
+    this.pingChanged(ids.length > 1 ? 'asset.created-batch' : 'asset.created', { count: ids.length });
     if (ids.length === 1) return this.detail(ids[0], user);
     return { ids, count: ids.length };
   }
@@ -599,6 +609,7 @@ export class AssetsService {
       const names = Object.keys(changes).map((k) => LABEL[k] ?? k);
       await this.addEvent(tx, id, 'UPDATED', `Cập nhật hồ sơ: ${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''}`, { changes }, user);
     });
+    this.pingChanged('asset.updated', { id });
     return this.detail(id, user);
   }
 
@@ -620,6 +631,7 @@ export class AssetsService {
       await tx.update(assets).set({ parentId: null }).where(eq(assets.parentId, id));
       await this.addEvent(tx, id, 'DELETED', 'Xoá tài sản', { code: cur.code }, user);
     });
+    this.pingChanged('asset.deleted', { id });
     return { id };
   }
 

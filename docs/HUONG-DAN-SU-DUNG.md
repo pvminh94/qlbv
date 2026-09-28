@@ -121,14 +121,45 @@ Menu **Quản lý tài sản**: Tổng quan · Danh sách · Chứng từ · Ki�
 6. **Kiểm kê điện tử** (*Kiểm kê*):
    - *Lập đợt kiểm kê*: đặt tên, chọn **phạm vi** (khoa/phòng, vị trí, loại, nhóm — đếm thử số tài sản trước khi lưu), nhập **thành phần hội đồng** và **phân công quét**; bật *Kiểm kê mù* nếu muốn lực lượng độc lập quét mà không thấy sổ sách.
    - **Bắt đầu** = hệ thống chốt “sổ sách” toàn bộ tài sản thuộc phạm vi. Phạm vi không đổi được nữa (huỷ đợt để lập lại).
-   - **Quét**: vào *Quét mã* trên máy tính có cắm máy quét, hoặc mở trang quét bằng điện thoại rồi bật camera quét QR trên tem. Ngườì quét chỉ cần quét — hệ thống tự đối chiếu: *Khớp · Sai vị trí · Khác tình trạng · Thiếu · Thừa · Chưa có hồ sơ*. Chọn *Tải cho chế độ offline* để quét khi mất mạng: lượt quét lưu trên máy và tự gửi khi có mạng lại (gửi thế nào cũng không bị trùng).
+   - **Quét**: vào *Quét mã* trên máy tính có cắm máy quét, hoặc mở trang quét bằng điện thoại rồi bật camera quét QR trên tem.  quét chỉ cần quét — hệ thống tự đối chiếu: *Khớp · Sai vị trí · Khác tình trạng · Thiếu · Thừa · Chưa có hồ sơ*. Chọn *Tải cho chế độ offline* để quét khi mất mạng: lượt quét lưu trên máy và tự gửi khi có mạng lại (gửi thế nào cũng không bị trùng).
    - Theo dõi đợt: thanh tiến độ tổng và theo từng khoa, ai quét gì lúc nào. Có thể sửa từng dòng (có/không thấy/vị trí/tình trạng thực tế) hoặc đánh dấu hàng loạt.
-   - **Khoá số liệu & trình duyệt**: phần còn lại không quét được tự tính là “Không tìm thấy” (nếu sót có thể *Mở lại*). Ngườì điều hành lập **chứng từ xử lý chênh lệch** ngay từ đợt kiểm kê: điều chuyển về đúng nơi thực tế, báo hỏng, báo mất (chứng từ vẫn duyệt như bình thường), phần còn lại *Ghi nhận*.
-   - Ngườì có quyền `asset.inventory.approve` **Duyệt kết quả**: tài sản được ghi ngày kiểm kê và (mặc định) cập nhật tình trạng thực tế vào hồ sơ. In **Biên bản kiểm kê** (A4 ngang, mẫu `BIEN_BAN_KIEM_KE` chỉnh được trong Thiết kế bản in; chọn *chỉ phần chênh lệch* để in ngắn) hoặc xuất **Excel** kết quả.
-7. **Lịch bảo trì** (*Lịch bảo trì / kiểm định*): lưới tháng các việc kiểm định/bảo dưỡng/hết bảo hành, cột ngoàn **Quá hạn**, các “lần lặp dự kiến” theo chu kỳ (có thể ẩn). Nút **Tải lịch (.ics)** mở được trong Outlook/Google Calendar. Mỗi sáng 07:30 hệ thống tự gửi thông báo “Nhắc hạn thiết bị” cho phòng Vật tư (toàn viện) và trưởng khoa (khoa mình) — cấu hình trong *Quản trị → Tác vụ định kỳ*.
+   - **Khoá số liệu & trình duyệt**: phần còn lại không quét được tự tính là “Không tìm thấy” (nếu sót có thể *Mở lại*). Người điều hành lập **chứng từ xử lý chênh lệch** ngay từ đợt kiểm kê: điều chuyển về đúng nơi thực tế, báo hỏng, báo mất (chứng từ vẫn duyệt như bình thường), phần còn lại *Ghi nhận*.
+   - Người có quyền `asset.inventory.approve` **Duyệt kết quả**: tài sản được ghi ngày kiểm kê và (mặc định) cập nhật tình trạng thực tế vào hồ sơ. In **Biên bản kiểm kê** (A4 ngang, mẫu `BIEN_BAN_KIEM_KE` chỉnh được trong Thiết kế bản in; chọn *chỉ phần chênh lệch* để in ngắn) hoặc xuất **Excel** kết quả.
+7. **Lịch bảo trì** (*Lịch bảo trì / kiểm định*): lưới tháng các việc kiểm định/bảo dưỡng/hết bảo hành, cột ngoài **Quá hạn**, các “lần lặp dự kiến” theo chu kỳ (có thể ẩn). Nút **Tải lịch (.ics)** mở được trong Outlook/Google Calendar. Mỗi sáng 07:30 hệ thống tự gửi thông báo “Nhắc hạn thiết bị” cho phòng Vật tư (toàn viện) và trưởng khoa (khoa mình) — cấu hình trong *Quản trị → Tác vụ định kỳ*.
 8. **Báo cáo tài sản** (*Báo cáo*): 8 báo cáo chuẩn — Sổ TSCĐ (cộng từng loại) · Tăng giảm trong kỳ · Theo khoa/phòng · Chi phí sửa chữa/bảo dưỡng/kiểm định · Thiết bị đến hạn · Hết khấu hao vẫn sử dụng · Ghi giảm (thanh lý, mất) · Kết quả kiểm kê. Chọn thông số → bảng hiện ngay (dòng tổng dính cuối), xuất **Excel** hoặc **In PDF** chuẩn sổ có chữ ký. Trưởng khoa tự xem báo cáo khoa mình.
 6. **Quét mã**: máy quét USB/Bluetooth gõ mã + Enter, hoặc bấm biểu tượng camera (Chrome/Edge/Android).
 7. Hồ sơ tài sản đã phát sinh chứng từ/khấu hao sẽ **khoá** nguyên giá, khoa, người giữ, trạng thái — muốn đổi phải lập chứng từ để đảm bảo sổ sách.
+
+## 7c. Bảng điều khiển & báo cáo tuỳ biến (Studio)
+
+Hệ thống có sẵn **bộ công cụ kéo-thả** (giống Power BI thu nhỏ): mọi người đều tự
+dựng trang tổng quan và báo cáo của riêng mình từ các nguồn dữ liệu được cấp quyền,
+không cần biết lập trình. Chấm xanh **Trực tiếp** trên đầu trang nghĩa là số liệu tự
+cập nhật ngay khi có thay đổi (kết nối thời gian thực qua SSE), không phải bấm tải lại.
+
+1. **Bảng điều khiển** (*Tổng quan → Bảng điều khiển*):
+   - Trang mặc định "Tổng quan công tác" do quản trị dựng sẵn: 6 ô KPI, diễn biến
+     phiếu 14 ngày, phiếu theo trạng thái, số liệu theo khoa, tác vụ định kỳ.
+   - **Chỉnh sửa**: bấm *Chỉnh sửa* → thêm ô (KPI, đường, miền, cột, cột ngang,
+     tròn, bánh, bảng, văn bản, ô tích hợp như Tác vụ định kỳ/Hoạt động gần đây),
+     đổi rộng hẹp bằng nút **[−]/[+]**, sắp xếp bằng mũi tên, xoá ô. Ô dữ liệu bấm
+     biểu tượng bánh răng để chọn **nguồn dữ liệu, chỉ số (đếm/tổng/trung bình…),
+     nhóm theo, bộ lọc, khoảng thời gian** — xem trước ngay trong hộp thoại.
+     Bấm **Lưu bố cục** để ghi.
+   - **Nhân bản**: với trang hệ thống/vai trò, bấm *Nhân bản* để tạo bản riêng rồi
+     tuỳ biến thoải mái; đặt làm **Mặc định** để mở đầu tiên khi vào.
+   - **Trang mới**: nút *＋ Trang mới* tạo trang trống của riêng bạn (có thể tạo
+     nhiều trang — chuyển bằng hộp chọn trên đầu).
+2. **Báo cáo tuỳ biến** (*Báo cáo khoa → Báo cáo tuỳ biến*):
+   - Danh sách hiển thị phạm vi: **Của tôi / Vai trò / Hệ thống**. Mở trang →
+     thiết kế giống bảng điều khiển; ô **bảng dữ liệu** có nút **xuất Excel** ngay
+     trên ô (máy chủ tổng hợp, tôn trọng phân quyền dữ liệu — bạn chỉ thấy nguồn
+     mình được quyền xem).
+   - Quản trị (quyền `studio.report.manage`) tạo báo cáo **phạm vi Hệ thống** cho
+     toàn viện dùng chung.
+3. **Phạm vi dữ liệu an toàn**: mọi câu hỏi dữ liệu chạy phía máy chủ qua "query
+   engine" — câu hỏi chỉ gồm tên nguồn + chỉ số theo từ khoá cho phép, không SQL tự
+   do; người xem thiếu quyền nguồn sẽ thấy ô trống thay vì số liệu.
 
 ## 8. Câu hỏi thường gặp
 

@@ -33,6 +33,8 @@ import { AssetsModule } from './modules/assets/assets.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UtilitiesModule } from './modules/utilities/utilities.module';
 import { BackupsModule } from './modules/backups/backups.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { StudioModule } from './modules/studio/studio.module';
 
 const envFile = [
   path.resolve(process.cwd(), '.env'),
@@ -72,6 +74,9 @@ const envFile = [
     NotificationsModule,
     DashboardModule,
     AssetsModule,
+    // Studio + realtime (GĐ3): báo cáo/dashboard tùy biến, SSE
+    RealtimeModule,
+    StudioModule,
     // Kiểm tra tình trạng
     HealthModule,
   ],

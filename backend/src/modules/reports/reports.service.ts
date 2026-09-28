@@ -38,6 +38,7 @@ import { evaluateFormula, formulaRefs } from '../../common/utils/formula.util';
 import { resolvePeriod, eachDay, today } from '../../common/utils/date.util';
 import type { AccessContext } from '../../common/types/access-context';
 import { CacheService } from '../../infra/cache/cache.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { AuditService } from '../audit/audit.service';
 import type {
   ColumnInputDto,
@@ -146,6 +147,7 @@ export class ReportsService {
     private readonly db: DbService,
     private readonly cache: CacheService,
     private readonly audit: AuditService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /* ============================================================ MẪU BÁO CÁO */
@@ -915,6 +917,8 @@ export class ReportsService {
     });
 
     await this.cache.delByPrefix(`report:${dto.templateId}`);
+    // GĐ3: báo dashboard/báo cáo realtime biết số liệu vừa thay đổi
+    this.realtime.publish({ topic: 'report', type: 'entries.changed', permission: 'report.view.view', data: { templateId: dto.templateId, entryDate } });
     return {
       templateId: dto.templateId,
       entryDate,

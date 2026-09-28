@@ -54,6 +54,34 @@
 | `notifications` | thông báo trong hệ thống | `notifications` |
 | `dashboard` | số liệu tổng quan theo phạm vi người dùng | (tổng hợp, có cache) |
 | `ops` (nền) | tệp đính kèm, nhập/xuất dữ liệu, sao lưu | `attachments`, `data_jobs`, `backups` |
+| `studio` | query engine an toàn + trang bảng điều khiển/báo cáo tuỳ biến (kéo-thả), xuất Excel | `studio_pages` |
+| `realtime` | SSE: phát sự kiện thay đổi dữ liệu theo chủ đề, chiếu phạm vi người nhận | (bộ nhớ, không bảng) |
+
+### Studio — query engine
+
+Giao diện kéo-thả (Power BI thu nhỏ) nhưng **mọi câu hỏi chạy phía máy chủ**:
+nguồn dữ liệu được khai báo tường minh (`studio.sources.ts`: HSBA, nhập liệu báo
+cáo, người dùng, tài sản, chứng từ, kiểm kê, thông báo…), mỗi nguồn kèm quyền xem
+bắt buộc và danh sách trường/toán tử cho phép. `dataSpec` chỉ chứa từ khoá
+(`source, metrics[agg,field], dimensions, filters[op], dateRange, orderBy, limit`)
+→ dịch sang SQL có sẵn mối quan hệ, áp `departmentScope`/phạm vi OWN/ALL của vai
+trò. Không có SQL tự do từ client. Xuất Excel dùng ExcelJS stream qua
+`POST /studio/query/export`. Trang lưu ở 3 phạm vi (`SYSTEM/ROLE/PERSONAL`) trong
+`studio_pages` (xoá mềm, mã duy nhất theo phạm vi), mỗi phạm vi tối đa 1 trang mặc
+định — chọn theo độ ưu tiên cá nhân → vai trò → hệ thống.
+
+### Realtime — SSE thay WebSocket
+
+Chọn **Server-Sent Events** qua đường `/api/realtime/stream` (đi qua proxy Next nên
+một miền, không cấu hình CORS riêng, tự kết nối lại): mỗi sự kiện nghiệp vụ
+(`hsba-request.created/updated/signed`, `asset.*`, `notification.created`…) được
+`RealtimeService.emit(topic, event, data, scope)` đẩy tới đúng subscriber của chủ
+đề, lọc theo phạm vi dữ liệu (ví dụ trưởng khoa chỉ nhận sự kiện phiếu của khoa
+mình; người dùng thường chỉ nhận thông báo của mình). Keep-alive 25 giây, phát
+hiện đứt kết nối bằng heartbeat. Frontend: `RealtimeProvider` mở **một**
+`EventSource` dùng chung (JWT qua query vì EventSource không đặt header, chỉ chấp
+nhận ở endpoint này), `useRealtimeEvent` cho mọi màn hình + ánh xạ nguồn→chủ đề để
+ô Studio tự làm mới; nhãn "Trực tiếp" trên topbar báo trạng thái kết nối.
 
 ## 3. Luồng nghiệp vụ 1 — Phiếu đề nghị sửa hồ sơ bệnh án
 

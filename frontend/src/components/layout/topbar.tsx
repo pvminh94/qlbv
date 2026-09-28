@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { useRealtimeEvent } from '@/lib/realtime';
 import { cn, formatDateTime } from '@/lib/utils';
 import type { Notification } from '@/types/api';
 
@@ -46,7 +47,14 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => apiFetch<{ items: Notification[]; total: number; unread: number }>('/notifications?limit=12'),
-    refetchInterval: 60_000,
+    refetchInterval: 300_000, // dự phòng — bình thường SSE đã cập nhật tức thì
+  });
+
+  // GĐ3: thông báo mớI qua kênh realtime — chuông cập nhật ngay, không chờ polling
+  useRealtimeEvent((event) => {
+    if (event.topic === 'notification') {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    }
   });
 
   const markRead = useMutation({

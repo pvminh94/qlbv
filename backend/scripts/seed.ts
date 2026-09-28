@@ -20,6 +20,7 @@ import * as schema from '../src/db/schema';
 import { defaultAssetLabelDocument, LABEL_TEMPLATE_CODE } from '../src/modules/assets/asset-label-template';
 import { defaultAssetVoucherDocument, VOUCHER_TEMPLATE_CODE } from '../src/modules/assets/asset-voucher-template';
 import { defaultInventoryDocument, INVENTORY_TEMPLATE_CODE } from '../src/modules/assets/asset-inventory-template';
+import { seedStudioDefaultDashboard } from './seed-studio';
 import {
   DEMO_DEPARTMENTS,
   DEMO_REPORT_TEMPLATE,
@@ -585,6 +586,7 @@ async function main(): Promise<void> {
   await seedAssetLabelTemplate();
   await seedAssetVoucherTemplate();
   await seedAssetInventoryTemplate();
+  await seedStudioDefaultDashboard(db, log);
 
   console.log('\n✅ Hoàn tất khởi tạo dữ liệu nền.\n');
   console.log(`   Đăng nhập: ${config.seed.adminUser} / ${config.seed.adminPass}`);

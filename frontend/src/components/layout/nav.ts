@@ -72,6 +72,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/bao-cao', label: 'Xem báo cáo', icon: BarChart3, permission: 'report.view.view' },
       { href: '/bao-cao/tong-hop', label: 'Tổng hợp toàn viện', icon: Activity, permission: 'report.summary.view' },
       { href: '/bao-cao/mau', label: 'Mẫu báo cáo', icon: FileText, permission: 'report.template.view' },
+      { href: '/bao-cao/tuy-bien', label: 'Báo cáo tuỳ biến', icon: SlidersHorizontal, permission: 'studio.report.view' },
     ],
   },
   {
