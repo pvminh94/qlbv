@@ -25,7 +25,8 @@
     "dev:postgres": "tsx scripts/dev-postgres.ts",
     "test": "node --test --import tsx test/*.test.ts",
     "db:demo": "tsx scripts/demo-data.ts",
-    "db:backfill-search": "tsx scripts/backfill-search-text.ts"
+    "db:backfill-search": "tsx scripts/backfill-search-text.ts",
+    "db:comments": "tsx scripts/db-comments.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.6",

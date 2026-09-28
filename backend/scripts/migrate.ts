@@ -9,6 +9,7 @@
  *        npm run db:migrate -- --status
  */
 import 'dotenv/config';
+import { syncDbComments } from './db-comments';
 import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -127,6 +128,11 @@ async function main(): Promise<void> {
       : `✔ Đã áp dụng ${ran} migration. Tổng: ${nowApplied}/${total}.`,
   );
   await client.end();
+
+  /* Gắn ghi chú tiếng Việt cho bảng/cột (từ điển dữ liệu) */
+  await syncDbComments().catch((err) =>
+    console.warn('⚠ Không gắn được ghi chú CSDL (bỏ qua, không ảnh hưởng dữ liệu):', err?.message ?? err),
+  );
 }
 
 main().catch((err) => {

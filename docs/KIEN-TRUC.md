@@ -135,6 +135,23 @@ Mẫu báo cáo                         Mở lưới theo kỳ                  
 * **Chốt số liệu** lưu nguyên trạng bảng số liệu vào `report_snapshots.payload`
   để số liệu đã báo cáo không bị ảnh hưởng khi sửa về sau; có duyệt và khoá.
 
+### Từ điển dữ liệu (ghi chú tiếng Việt cho CSDL)
+
+Tên bảng/cột/khoá giữ **tiếng Anh** (chuẩn quốc tế — tích hợp, công cụ, nhân sự),
+còn ý nghĩa được tài liệu hoá bằng **COMMENT ON tiếng Việt** trong chính CSDL
+(hiển thị trong DBeaver/pgAdmin/DataGrip và `\d+ <bảng>` của psql; đi theo
+bản sao lưu pg_dump).
+
+- Nguồn duy nhất: `backend/src/db/schema-comments.ts`
+  (`TABLE_COMMENTS`, `COLUMN_COMMENTS` theo bảng, `COLUMN_COMMENTS_COMMON`
+  theo tên cột dùng chung — đều khai báo theo **đúng tên cột CSDL, snake_case**).
+- Tự đồng bộ: `scripts/db-comments.ts` chạy cuối mỗi lần `db:migrate`
+  (nên cả lệnh cập nhật trên máy chủ và dev đều được gắn ghi chú);
+  có thể chạy tay `npm run db:comments`. Idempotent, không đụng dữ liệu.
+- **Quy ước khi thêm bảng/cột mới**: khai báo ghi chú vào file từ điển.
+  Script tự IN CẢNH BÁO mọi bảng/cột còn thiếu ghi chú sau mỗi lần migrate
+  nên không thể quên.
+
 ## 5. Bảo mật & phân quyền
 
 * Đăng nhập bằng JWT (access 60 phút + refresh 12 giờ), mật khẩu băm bcrypt.
