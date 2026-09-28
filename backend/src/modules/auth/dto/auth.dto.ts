@@ -28,9 +28,9 @@ export class ChangePasswordDto {
   @IsNotEmpty({ message: 'Vui lòng nhập mật khẩu hiện tại' })
   currentPassword!: string;
 
-  @ApiProperty({ description: 'Mật khẩu mới (tối thiểu 6 ký tự)' })
+  @ApiProperty({ description: 'Mật khẩu mới — độ dài tối thiểu theo cấu hình hệ thống (mặc định 6 ký tự)' })
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu mới phải có ít nhất 6 ký tự' })
+  @MinLength(1, { message: 'Vui lòng nhập mật khẩu mới' })
   @MaxLength(200)
   newPassword!: string;
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { KeyRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -15,6 +15,13 @@ import { useAuth } from '@/lib/auth';
 export default function ChangePasswordPage() {
   const router = useRouter();
   const logout = useAuth((s) => s.logout);
+  const { data: publicSettings } = useQuery({
+    queryKey: ['settings-public'],
+    queryFn: () => apiFetch<Record<string, unknown>>('/settings/public'),
+    staleTime: 60_000,
+  });
+  const minPwdLength = Number(publicSettings?.['system.passwordMinLength']) || 6;
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -35,7 +42,7 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Đổi mật khẩu" description="Mật khẩu mới cần tối thiểu 6 ký tự; mọi phiên đăng nhập khác sẽ bị thu hồi" />
+      <PageHeader title="Đổi mật khẩu" description={`Mật khẩu mới cần tối thiểu ${minPwdLength} ký tự; mọi phiên đăng nhập khác sẽ bị thu hồi`} />
       <Card className="max-w-lg">
         <form
           className="space-y-4 p-4"
@@ -54,7 +61,7 @@ export default function ChangePasswordPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="new">Mật khẩu mới *</Label>
-            <Input id="new" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} />
+            <Input id="new" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={minPwdLength} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="confirm">Nhập lại mật khẩu mới *</Label>

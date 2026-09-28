@@ -20,6 +20,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { createHash, randomUUID } from 'crypto';
 import { config } from '../../config/env';
 import { DbService } from '../../db/db.service';
+import { SettingsService } from '../settings/settings.service';
 import {
   departments,
   loginLogs,
@@ -57,6 +58,7 @@ export class AuthService {
     private readonly db: DbService,
     private readonly jwt: JwtService,
     private readonly cache: CacheService,
+    private readonly settings: SettingsService,
   ) {}
 
   /* ------------------------------------------------------------------ Đăng nhập */
@@ -429,6 +431,12 @@ export class AuthService {
 
     if (await bcrypt.compare(dto.newPassword, user.passwordHash)) {
       throw new BadRequestException('Mật khẩu mới phải khác mật khẩu hiện tại');
+    }
+
+    // Độ dài tối thiểu theo cấu hình hệ thống (DTO chỉ chặn mật khẩu rỗng)
+    const minLen = await this.settings.passwordMinLength();
+    if (dto.newPassword.length < minLen) {
+      throw new BadRequestException(`Mật khẩu mới phải có ít nhất ${minLen} ký tự`);
     }
 
     await this.db.db

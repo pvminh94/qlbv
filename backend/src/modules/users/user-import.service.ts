@@ -14,6 +14,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { Request } from 'express';
 import * as ExcelJS from 'exceljs';
 import { DbService } from '../../db/db.service';
+import { SettingsService } from '../settings/settings.service';
 import { departments, jobTitles, roles, userRoles, users } from '../../db/schema';
 import type { AccessContext } from '../../common/types/access-context';
 import { AuditService } from '../audit/audit.service';
@@ -70,6 +71,7 @@ export class UserImportService {
     private readonly db: DbService,
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly settings: SettingsService,
   ) {}
 
   /* ------------------------------------------------------------ Đầu vào */
@@ -213,6 +215,8 @@ export class UserImportService {
     const newTitles = new Map<string, string>();
     const seenInFile = new Map<string, number>();
 
+    // Độ dài mật khẩu tối thiểu từ cấu hình hệ thống — ngắn hơn thì rơi về mật khẩu mặc định
+    const pwdMin = await this.settings.passwordMinLength();
     const planned: PlannedRow[] = rows.map(({ line, values: v }) => {
       const messages: PlannedRow['messages'] = [];
       const fullName = (v.fullName ?? '').trim();
@@ -323,8 +327,8 @@ export class UserImportService {
 
       const password = (v.password ?? '').trim();
       if (password) {
-        if (password.length >= 6) row.password = password;
-        else messages.push({ level: 'warning', text: 'Mật khẩu dưới 6 ký tự — dùng mật khẩu mặc định' });
+        if (password.length >= pwdMin) row.password = password;
+        else messages.push({ level: 'warning', text: `Mật khẩu dưới ${pwdMin} ký tự — dùng mật khẩu mặc định` });
       }
 
       if (row.action !== 'error') {
@@ -341,6 +345,18 @@ export class UserImportService {
             row.action = 'skip';
             messages.push({ level: 'info', text: 'Tài khoản đã có — bỏ qua (chọn "Ghi đè" để cập nhật)' });
           }
+        }
+      }
+
+      // Vai trò mặc định cho tài khoản tạo mới khi tệp không chỉ định: gán vai trò
+      // "Nhập liệu / Người đề nghị" (mã NHAP_LIEU — nút quyền nhỏ nhất).
+      // Dòng 'update'/'skip' không tự thêm — tránh cấp quyền ngoài ý muốn cho tài khoản đã có.
+      if (row.action === 'create' && row.roleIds.length === 0) {
+        const r = roleIndex.get('NHAP_LIEU');
+        if (r) {
+          row.roleIds.push(r.id);
+          row.roles.push(r.code);
+          messages.push({ level: 'info', text: `Không chỉ định vai trò — gán mặc định "${r.name}"` });
         }
       }
       return row;

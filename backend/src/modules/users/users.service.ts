@@ -12,6 +12,7 @@ import {
 import { and, asc, desc, eq, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { config } from '../../config/env';
 import { DbService } from '../../db/db.service';
+import { SettingsService } from '../settings/settings.service';
 import {
   departments,
   loginLogs,
@@ -52,6 +53,7 @@ export class UsersService {
     private readonly db: DbService,
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly settings: SettingsService,
   ) {}
 
   async list(query: UserQueryDto): Promise<Paginated<Record<string, unknown>>> {
@@ -219,6 +221,14 @@ export class UsersService {
       .limit(1);
     if (dup.length > 0) throw new ConflictException(`Tên đăng nhập "${username}" đã tồn tại`);
 
+    // Độ dài mật khẩu tối thiểu theo cấu hình hệ thống (DTO chỉ chặn chuỗi rỗng)
+    if (dto.password !== undefined) {
+      const minLen = await this.settings.passwordMinLength();
+      if (dto.password.length < minLen) {
+        throw new BadRequestException(`Mật khẩu phải có ít nhất ${minLen} ký tự`);
+      }
+    }
+
     const password = dto.password ?? DEFAULT_RESET_PASSWORD;
     const [created] = await this.db.db
       .insert(users)
@@ -379,6 +389,12 @@ export class UsersService {
       throw new BadRequestException('Hãy đổi mật khẩu của chính mình ở trang Tài khoản');
     }
     await this.assertCanTouchTarget(id, actor);
+    if (dto.newPassword !== undefined) {
+      const minLen = await this.settings.passwordMinLength();
+      if (dto.newPassword.length < minLen) {
+        throw new BadRequestException(`Mật khẩu phải có ít nhất ${minLen} ký tự`);
+      }
+    }
     const newPassword = dto.newPassword ?? DEFAULT_RESET_PASSWORD;
     await this.db.db
       .update(users)

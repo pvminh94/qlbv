@@ -45,19 +45,7 @@ export default function LoginPage() {
             <div className="text-xs text-white/75">Phần mềm Quản lý Bệnh viện</div>
           </div>
         </div>
-        <div className="space-y-4">
-          <h1 className="text-3xl font-semibold leading-snug">
-            Sửa hồ sơ bệnh án điện tử
-            <br />
-            và báo cáo công tác của khoa
-          </h1>
-          <ul className="space-y-2 text-sm text-white/85">
-            <li>• Quy trình ký điện tử nhiều bước, cấu hình được, có mã xác thực nội dung</li>
-            <li>• Báo cáo theo ngày / tuần / tháng / quý / năm, tổng hợp toàn viện</li>
-            <li>• Thiết kế bản in chuyên nghiệp, kết xuất PDF · Word · Excel</li>
-            <li>• Phân quyền theo vai trò, khoa phòng tạo động, nhật ký kiểm toán đầy đủ</li>
-          </ul>
-        </div>
+        <div />
         <div className="text-xs text-white/60">Hệ thống dùng nội bộ — Bệnh viện Quân y 4</div>
       </div>
 

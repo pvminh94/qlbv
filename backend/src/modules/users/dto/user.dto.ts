@@ -46,11 +46,11 @@ export class CreateUserDto {
   @MaxLength(128)
   fullName!: string;
 
-  @ApiPropertyOptional({ description: 'Mật khẩu (bỏ trống sẽ dùng mật khẩu mặc định)' })
+  @ApiPropertyOptional({ description: 'Mật khẩu (bỏ trống sẽ dùng mật khẩu mặc định; độ dài tối thiểu theo cấu hình hệ thống)' })
   @Transform(emptyToUndefined)
   @IsOptional()
   @IsString()
-  @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự' })
+  @MinLength(1, { message: 'Vui lòng nhập mật khẩu' })
   password?: string;
 
   @ApiPropertyOptional({ example: 'Bác sĩ' })
@@ -132,10 +132,10 @@ export class UserQueryDto extends AdvancedQueryDto {
 }
 
 export class ResetPasswordDto {
-  @ApiPropertyOptional({ description: 'Mật khẩu mới (bỏ trống = mặc định Qlbs@123456)' })
+  @ApiPropertyOptional({ description: 'Mật khẩu mới (bỏ trống = mặc định Qlbs@123456; độ dài tối thiểu theo cấu hình hệ thống)' })
   @IsOptional()
   @IsString()
-  @MinLength(6)
+  @MinLength(1, { message: 'Vui lòng nhập mật khẩu mới' })
   newPassword?: string;
 
   @ApiPropertyOptional({ description: 'Bắt buộc người dùng đổi mật khẩu sau khi đăng nhập' })

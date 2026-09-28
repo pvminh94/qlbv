@@ -73,6 +73,13 @@ export class SettingsService {
     return row.value as T;
   }
 
+  /** Độ dài mật khẩu tối thiểu theo cấu hình `system.passwordMinLength` (mặc định 6, ép khung 1–64) */
+  async passwordMinLength(): Promise<number> {
+    const v = Number(await this.get<number>('system.passwordMinLength', 6));
+    if (!Number.isFinite(v)) return 6;
+    return Math.min(64, Math.max(1, Math.floor(v)));
+  }
+
   async getMany(keys: string[]): Promise<Record<string, unknown>> {
     if (keys.length === 0) return {};
     const rows = await this.db.db
