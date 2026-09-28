@@ -28,6 +28,7 @@ const KINDS = [
   { value: 'KHOA', label: 'Khoa' },
   { value: 'PHONG', label: 'Phòng chức năng' },
   { value: 'TRUNG_TAM', label: 'Trung tâm' },
+  { value: 'BAN', label: 'Ban' },
   { value: 'TO', label: 'Tổ / Nhóm' },
 ];
 

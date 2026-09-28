@@ -133,13 +133,16 @@ export class CacheService implements OnModuleInit, OnApplicationShutdown {
       let cursor = '0';
       let removed = 0;
       // LƯU Ý: ioredis KHÔNG tự thêm keyPrefix vào tham số MATCH của SCAN,
-      // và khoá do SCAN trả về đã có sẵn tiền tố → phải tự ghép/không ghép lại.
+      // và khoá do SCAN trả về đã có sẵn tiền tố — phải BÓC tiền tố ra trước
+      // khi DEL, nếu không client sẽ tự ghép thêm một lần nữa (xoá trật).
       const pattern = `${config.redis.keyPrefix}${prefix}*`;
+      const plen = config.redis.keyPrefix.length;
       do {
         const [next, found] = await this.redis!.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
         cursor = next;
         if (found.length > 0) {
-          await this.redis!.del(...found);
+          const bare = found.map((k) => (k.startsWith(config.redis.keyPrefix) ? k.slice(plen) : k));
+          await this.redis!.del(...bare);
           removed += found.length;
         }
       } while (cursor !== '0');
