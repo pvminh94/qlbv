@@ -362,6 +362,7 @@ export const COLUMN_COMMENTS: Record<string, Record<string, string>> = {
     'must_change_password': 'Bắt buộc đổi mật khẩu ở lần đăng nhập kế tiếp',
     'two_factor_enabled': 'Xác thực 2 lớp (TOTP) — bật/tắt theo người dùng',
     'failed_login_count': 'Giới hạn số lần đăng nhập sai liên tiếp',
+    'telegram_chat_id': 'Mã chat Telegram đã liên kết (nhận thông báo qua Bot)',
   },
   'utilities': {
     'badge': 'Nhãn nhỏ hiển thị cạnh tên tiện ích',

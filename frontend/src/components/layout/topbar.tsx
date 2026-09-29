@@ -50,7 +50,7 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
     refetchInterval: 300_000, // dự phòng — bình thường SSE đã cập nhật tức thì
   });
 
-  // GĐ3: thông báo mớI qua kênh realtime — chuông cập nhật ngay, không chờ polling
+  // GĐ3: thông báo mới qua kênh realtime — chuông cập nhật ngay, không chờ polling
   useRealtimeEvent((event) => {
     if (event.topic === 'notification') {
       void queryClient.invalidateQueries({ queryKey: ['notifications'] });
@@ -186,7 +186,21 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
                       )}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="text-sm font-medium">{n.title}</div>
+                        <div className="flex min-w-0 items-start gap-1.5">
+                          <span
+                            className={cn(
+                              'mt-1.5 size-1.5 shrink-0 rounded-full',
+                              n.level === 'SUCCESS'
+                                ? 'bg-emerald-500'
+                                : n.level === 'WARNING'
+                                  ? 'bg-amber-500'
+                                  : n.level === 'ERROR'
+                                    ? 'bg-red-500'
+                                    : 'bg-sky-500',
+                            )}
+                          />
+                          <div className="truncate text-sm font-medium">{n.title}</div>
+                        </div>
                         <div className="whitespace-nowrap text-[10px] text-[var(--muted-foreground)]">
                           {formatDateTime(n.createdAt)}
                         </div>
@@ -197,6 +211,15 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
                     </Link>
                   ))
                 )}
+              </div>
+              <div className="border-t px-3 py-2 text-center">
+                <Link
+                  href="/thong-bao"
+                  onClick={() => setShowNotifications(false)}
+                  className="text-xs font-medium text-[var(--primary)] hover:underline"
+                >
+                  Xem trung tâm thông báo
+                </Link>
               </div>
             </div>
           ) : null}

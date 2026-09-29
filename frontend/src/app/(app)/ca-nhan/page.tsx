@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, LogOut, Monitor, Save, ShieldCheck, User } from 'lucide-react';
+import { KeyRound, LogOut, Monitor, Save, Send, ShieldCheck, Unlink, User } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -34,6 +34,98 @@ interface SessionInfo {
   userAgent: string;
   createdAt: string;
   lastSeenAt?: string;
+}
+
+/**
+ * Thẻ liên kết Telegram — kênh nhận thông báo đẩy về điện thoại (miễn phí).
+ * Luồng: bấm "Tạo mã" → mở bot bằng đường dẫn → bot xác nhận → tài khoản được liên kết.
+ */
+function TelegramCard() {
+  const queryClient = useQueryClient();
+  const status = useQuery({
+    queryKey: ['telegram-status'],
+    queryFn: () =>
+      apiFetch<{ enabled: boolean; botUsername: string; linked: boolean; deepLink: string }>(
+        '/notify-channels/telegram/status',
+      ),
+  });
+  const createCode = useMutation({
+    mutationFn: () =>
+      apiFetch<{ code: string; expiresAt: string; deepLink: string }>('/notify-channels/telegram/link-code', {
+        method: 'POST',
+      }),
+  });
+  const unlink = useMutation({
+    mutationFn: () => apiFetch('/notify-channels/telegram/link', { method: 'DELETE' }),
+    onSuccess: () => {
+      toast.success('Đã huỷ liên kết Telegram');
+      void queryClient.invalidateQueries({ queryKey: ['telegram-status'] });
+    },
+  });
+
+  const st = status.data;
+  return (
+    <Card>
+      <div className="flex items-center gap-2 border-b px-4 py-3 text-sm font-semibold">
+        <Send className="size-4" /> Thông báo qua Telegram
+      </div>
+      <div className="space-y-3 p-4 text-sm">
+        {status.isLoading ? (
+          <Skeleton className="h-16" />
+        ) : !st?.enabled ? (
+          <p className="text-xs text-[var(--muted-foreground)]">
+            Kênh Telegram Bot chưa được quản trị viên kích hoạt
+            (Cấu hình hệ thống → Thông báo → nhập Bot Token). Bật lên thì bạn có thể nhận
+            thông báo ký/duyệt phiếu ngay trên điện thoại.
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              {st.linked ? (
+                <Badge tone="success">Đã liên kết</Badge>
+              ) : createCode.data ? (
+                <Badge tone="warning">Chờ xác nhận</Badge>
+              ) : (
+                <Badge tone="muted">Chưa liên kết</Badge>
+              )}
+            </div>
+            {createCode.data && !st.linked ? (
+              <div className="space-y-2 rounded-lg border border-dashed p-3">
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  Mở Telegram và nhắn cho bot tin{' '}
+                  <code className="rounded bg-[var(--muted)] px-1.5 py-0.5 font-semibold">
+                    /start {createCode.data.code}
+                  </code>{' '}
+                  để hoàn tất (mã có hạn 10 phút):
+                </p>
+                {createCode.data.deepLink ? (
+                  <Button size="sm" onClick={() => window.open(createCode.data!.deepLink, '_blank')}>
+                    <Send /> Mở bot trên Telegram
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+              {!st.linked ? (
+                <Button
+                  size="sm"
+                  variant={createCode.data ? 'outline' : 'default'}
+                  loading={createCode.isPending}
+                  onClick={() => createCode.mutate()}
+                >
+                  <Send /> {createCode.data ? 'Tạo mã khác' : 'Tạo mã liên kết'}
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" loading={unlink.isPending} onClick={() => unlink.mutate()}>
+                  <Unlink /> Huỷ liên kết
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  );
 }
 
 export default function ProfilePage() {
@@ -127,6 +219,8 @@ export default function ProfilePage() {
           </Card>
 
           <div className="space-y-4">
+            <TelegramCard />
+
             <Card>
               <div className="flex items-center gap-2 border-b px-4 py-3 text-sm font-semibold">
                 <ShieldCheck className="size-4" /> Vai trò & quyền

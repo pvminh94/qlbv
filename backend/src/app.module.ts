@@ -28,6 +28,7 @@ import { PrintingModule } from './modules/printing/printing.module';
 import { HsbaModule } from './modules/hsba/hsba.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { NotifyChannelsModule } from './modules/notify-channels/notify-channels.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -72,6 +73,7 @@ const envFile = [
     HsbaModule,
     ReportsModule,
     NotificationsModule,
+    NotifyChannelsModule,
     DashboardModule,
     AssetsModule,
     // Studio + realtime (GĐ3): báo cáo/dashboard tùy biến, SSE

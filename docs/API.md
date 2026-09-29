@@ -322,3 +322,20 @@ nguồn → chủ đề để tự làm mới đúng ô.
 > Kiểm kê — kết quả đối chiếu: `KHOP` khớp · `SAI_VI_TRI` sai khoa/vị trí · `SAI_TINH_TRANG` khác tình trạng · `THIEU` thiếu · `THUA` thừa · `KHONG_RO` chưa có hồ sơ. Trạng thái đợt: `NHAP → DANG_KIEM_KE → CHO_DUYET → HOAN_TAT` (+ `DA_HUY`).
 >
 > Tác vụ định kỳ `asset.due-reminder` (mã `NHAC_HAN_TAI_SAN`, 07:30 mỗi ngày): nhắc hạn kiểm định/bảo dưỡng/bảo hành cho người quản lý tài sản (toàn viện) và trưởng khoa (khoa mình), tối đa 1 thông báo/người/ngày; cấu hình `payload.days` (mặc định 15).
+
+### Thông báo (`/api/notifications`)
+
+| Route | Mô tả |
+|---|---|
+| `GET /api/notifications?limit=12` | Danh sách phẳng cho nút chuông (giữ nguyên); kèm `unread` |
+| `GET /api/notifications?page=1&pageSize=15&read=unread&module=HSBA` | Phân trang cho trang Thông báo; `read=all\|read\|unread`, `module` lọc mô-đun |
+| `GET /api/notifications/modules` | Các mô-đun đã phát thông báo (dựng bộ lọc) |
+| `PATCH /api/notifications/:id/read` · `PATCH /api/notifications/read-all` | Đánh dấu đã đọc (một/tất cả) |
+| `DELETE /api/notifications/:id` · `DELETE /api/notifications/read` | Xoá (một/tất cả đã đọc) |
+
+Nội bộ: mọi phân hệ gọi `NotificationCenterService.notify(userIds, input)` — tự đồng bộ
+ghi DB + phát SSE `topic=notification` kèm `data` (title/body/level/link) + kênh ngoài.
+Sắp xếp: các bảng danh sách nhận `sortBy`/`sortDir` (whitelist từng service).
+
+Kênh Telegram (tuỳ chọn, nhóm khoá Cấu hình → Thông báo: `telegram.enabled`, `telegram.botToken`,
+`notify.channel.appUrl`): `GET /api/notify-channels/telegram/status`, `POST /api/notify-channels/telegram/link-code`, `DELETE /api/notify-channels/telegram/link`.

@@ -47,6 +47,27 @@ const USER_FILTERS: Record<string, FilterTarget> = {
   active: { expr: users.active, type: 'bool' },
 };
 
+/** Các cột cho phép sắp xếp ở danh sách người dùng (chống SQL injection qua tên trường) */
+const USER_SORTABLE = {
+  username: users.username,
+  fullName: users.fullName,
+  title: users.title,
+  email: users.email,
+  phone: users.phone,
+  departmentName: departments.name,
+  active: users.active,
+  lastLoginAt: users.lastLoginAt,
+  createdAt: users.createdAt,
+} as const;
+
+/** Thứ tự: mặc định = đang dùng trước + tên; có yêu cầu thì theo cột, kèm tiebreak ổn định */
+function userOrderBy(query: { sortBy?: string; sortDir?: 'asc' | 'desc' }) {
+  const col = USER_SORTABLE[(query.sortBy ?? '') as keyof typeof USER_SORTABLE];
+  if (!col) return [desc(users.active), asc(users.fullName)];
+  const dir = query.sortDir === 'desc' ? desc : asc;
+  return [dir(col), asc(users.id)];
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -122,7 +143,7 @@ export class UsersService {
       .from(users)
       .leftJoin(departments, eq(departments.id, users.departmentId))
       .where(condition)
-      .orderBy(desc(users.active), asc(users.fullName))
+      .orderBy(...userOrderBy(query))
       .limit(query.limit)
       .offset(query.offset);
 

@@ -50,6 +50,13 @@
       "when": 1790500000000,
       "tag": "0006_phan_he_tai_san",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0013_telegram_link",
+      "breakpoints": true
     }
   ]
 }

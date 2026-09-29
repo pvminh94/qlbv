@@ -48,6 +48,8 @@ export const users = pgTable(
     failedLoginCount: integer('failed_login_count').default(0).notNull(),
     lockedUntil: timestamp('locked_until', { withTimezone: true }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    /** Mã chat Telegram đã liên kết — kênh nhận thông báo tức thời */
+    telegramChatId: text('telegram_chat_id'),
     active: boolean('active').default(true).notNull(),
     note: text('note').default('').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

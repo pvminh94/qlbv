@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/app-shell';
 import { tokenStore } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { RealtimeProvider } from '@/lib/realtime';
+import { NotificationToaster } from '@/components/notification-toast';
 
 /**
  * Khu vực yêu cầu đăng nhập: kiểm tra token rồi nạp thông tin người dùng,
@@ -46,6 +47,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   return (
     <RealtimeProvider>
       <AppShell>{children}</AppShell>
+      <NotificationToaster />
     </RealtimeProvider>
   );
 }

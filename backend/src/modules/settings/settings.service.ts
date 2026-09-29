@@ -199,6 +199,11 @@ export function defaultSettings(): SettingItem[] {
     { key: 'notify.onSign', value: true, group: 'notification', label: 'Thông báo khi phiếu được ký', valueType: 'boolean' },
     { key: 'notify.onReturn', value: true, group: 'notification', label: 'Thông báo khi phiếu bị trả lại', valueType: 'boolean' },
 
+    // Kênh thông báo bên ngoài — Telegram Bot (miễn phí): bật rồi nhập Bot Token, người dùng tự liên kết ở trang Cá nhân
+    { key: 'notify.channel.appUrl', value: '', group: 'notification', label: 'Địa chỉ web hệ thống (ghép vào liên kết trong tin nhắn)', description: 'Ví dụ: http://192.168.1.10:3000 — bỏ trống thì tin nhắn không kèm liên kết' },
+    { key: 'telegram.enabled', value: false, group: 'notification', label: 'Gửi thông báo qua Telegram Bot', valueType: 'boolean' },
+    { key: 'telegram.botToken', value: '', group: 'notification', label: 'Telegram Bot Token', valueType: 'password', description: 'Tạo miễn phí bằng /newbot tại @BotFather trên Telegram' },
+
     // Hệ thống
     { key: 'system.sessionHours', value: 12, group: 'system', label: 'Thời gian phiên đăng nhập (giờ)', valueType: 'number' },
     { key: 'system.passwordMinLength', value: 6, group: 'system', label: 'Độ dài mật khẩu tối thiểu', valueType: 'number', isPublic: true },

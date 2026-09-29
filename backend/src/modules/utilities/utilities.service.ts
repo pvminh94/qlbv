@@ -3,7 +3,7 @@
  * mà không cần sửa mã nguồn. Menu được dựng động từ bảng này.
  */
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { DbService } from '../../db/db.service';
 import { utilities } from '../../db/schema';
 import type { Utility } from '../../db/schema/ops';
@@ -39,6 +39,21 @@ const UTILITY_FILTERS: Record<string, FilterTarget> = {
   active: { expr: utilities.active, type: 'bool' },
 };
 
+const UTILITY_SORTABLE = {
+  code: utilities.code,
+  name: utilities.name,
+  sortOrder: utilities.sortOrder,
+  active: utilities.active,
+  createdAt: utilities.createdAt,
+} as const;
+
+function utilityOrderBy(query: { sortBy?: string; sortDir?: 'asc' | 'desc' }) {
+  const col = UTILITY_SORTABLE[(query.sortBy ?? '') as keyof typeof UTILITY_SORTABLE];
+  if (!col) return [asc(utilities.sortOrder), asc(utilities.name)];
+  const dir = query.sortDir === 'desc' ? desc : asc;
+  return [dir(col), asc(utilities.id)];
+}
+
 @Injectable()
 export class UtilitiesService {
   constructor(
@@ -69,7 +84,7 @@ export class UtilitiesService {
       .select()
       .from(utilities)
       .where(condition)
-      .orderBy(asc(utilities.sortOrder), asc(utilities.name))
+      .orderBy(...utilityOrderBy(query))
       .limit(query.limit)
       .offset(query.offset);
 

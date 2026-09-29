@@ -213,3 +213,30 @@ Times New Roman gốc của Microsoft trên máy chủ, chạy `sudo bash deploy
 
 **Quên mật khẩu?** Liên hệ quản trị để *Đặt lại mật khẩu*; lần đăng nhập kế tiếp hệ
 thống có thể yêu cầu đổi mật khẩu.
+
+---
+
+## 11. Trung tâm thông báo
+
+Hệ thống thông báo 3 lớp giúp không bỏ lỡ biến động của phiếu/hồ sơ:
+
+1. **Thông báo nổi (toast)** — khi có sự kiện liên quan tới bạn (phiếu chờ ký, phiếu
+   bị trả lại kèm lý do, phiếu được duyệt thành công…), một thẻ nổi hiện ở góc dưới
+   phải màn hình ngay lập tức (không cần tải lại trang). Bấm thẻ để mở thẳng phiếu;
+   tự tắt sau ~9 giây. Màu viền trái thể hiện mức: xanh dương (thông tin),
+   xanh lá (thành công), vàng (cảnh báo), đỏ (lỗi).
+2. **Âm thanh “ting” nhẹ** và **số chưa đọc hiện trên tiêu đề tab** trình duyệt.
+3. **Chuông 🔔 trên thanh công cụ + trang Thông báo** (`/thong-bao` — mục Tổng
+   quan trên menu): xem lại toàn bộ, lọc theo mô-đun / chưa đọc / đã đọc, đánh dấu
+   đọc tất cả, xoá các tin đã đọc.
+
+Tuỳ chọn (bật/tắt toast, âm thanh, badge tab) nằm ngay trên đầu trang Thông báo,
+lưu riêng theo từng máy sử dụng.
+
+**Nhận thông báo qua Telegram (miễn phí, tuỳ chọn):**
+quản trị viên vào *Quản trị → Cấu hình hệ thống → Thông báo*, bật “Gửi thông báo qua
+Telegram Bot” và dán Bot Token (tạo miễn phí bằng `/newbot` tại @BotFather). Mỗi
+người dùng vào *Cá nhân → Thông báo qua Telegram → Tạo mã liên kết*, mở bot và gởi
+`/start <mã>` — xong, tin ký/duyệt sẽ đẩy thẳng về điện thoại kể cả khi không mở
+phần mềm. Có thể điền “Địa chỉ web hệ thống” (ví dụ http://192.168.1.10:3000) để
+tin nhắn kèm liên kết mở phiếu.

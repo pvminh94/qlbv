@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Badge, Card, EmptyState, Skeleton } from '@/components/ui/card';
@@ -43,6 +43,8 @@ export interface CrudColumn {
   label: string;
   className?: string;
   render?: (row: Record<string, unknown>) => ReactNode;
+  /** Cho phép sắp xếp theo cột khi bấm tiêu đề (mặc định: bật; máy chủ tự quyết cột hợp lệ) */
+  sortable?: boolean;
 }
 
 interface CrudTableProps {
@@ -68,6 +70,8 @@ interface CrudTableProps {
   toolbar?: ReactNode;
   /** Dữ liệu trả về đã là danh sách phẳng (không phân trang) */
   pageSize?: number;
+  /** Tắt chế độ sắp xếp bằng cách bấm tiêu đề cột (mặc định: bật) */
+  sortEnabled?: boolean;
 }
 
 /**
@@ -94,6 +98,7 @@ export function CrudTable({
   onRowClick,
   toolbar,
   pageSize = 15,
+  sortEnabled = true,
 }: CrudTableProps) {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
@@ -105,6 +110,8 @@ export function CrudTable({
   const [deleting, setDeleting] = useState<Record<string, unknown> | null>(null);
   /** Bộ lọc sâu dựng từ /meta/filters (chuỗi field:op:value) */
   const [deepFilters, setDeepFilters] = useState('');
+  /** Sắp xếp theo cột — bấm tiêu đề: tăng → giảm → bỏ sắp xếp */
+  const [sort, setSort] = useState<{ by: string; dir: 'asc' | 'desc' } | null>(null);
 
   const params = useMemo(() => {
     const p = new URLSearchParams();
@@ -115,8 +122,12 @@ export function CrudTable({
       if (v !== undefined && v !== '') p.set(k, String(v));
     }
     if (deepFilters) p.set('filters', deepFilters);
+    if (sort) {
+      p.set('sortBy', sort.by);
+      p.set('sortDir', sort.dir);
+    }
     return p.toString();
-  }, [page, pageSize, search, fixedParams, deepFilters]);
+  }, [page, pageSize, search, fixedParams, deepFilters, sort]);
 
   const queryKey = [endpoint, params];
   const { data, isLoading, isFetching, refetch } = useQuery({
@@ -220,6 +231,15 @@ export function CrudTable({
   const rows = data?.items ?? [];
   const totalPages = data?.totalPages ?? 1;
 
+  const toggleSort = (key: string): void => {
+    setPage(1);
+    setSort((cur) => {
+      if (!cur || cur.by !== key) return { by: key, dir: 'asc' };
+      if (cur.dir === 'asc') return { by: key, dir: 'desc' };
+      return null;
+    });
+  };
+
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
@@ -281,11 +301,31 @@ export function CrudTable({
         <TableWrap>
           <thead>
             <tr>
-              {tableColumns.map((c) => (
-                <Th key={c.key} className={c.className}>
-                  {c.label}
-                </Th>
-              ))}
+              {tableColumns.map((c) => {
+                const sortable = sortEnabled && c.sortable !== false;
+                const activeSort = sort?.by === c.key ? sort : null;
+                return (
+                  <Th
+                    key={c.key}
+                    className={cn(c.className, sortable && 'cursor-pointer select-none hover:text-[var(--foreground)]')}
+                    onClick={sortable ? () => toggleSort(c.key) : undefined}
+                    title={sortable ? 'Bấm để sắp xếp (tăng / giảm / bỏ)' : undefined}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      {c.label}
+                      {sortable ? (
+                        activeSort?.dir === 'asc' ? (
+                          <ArrowUp className="size-3" />
+                        ) : activeSort?.dir === 'desc' ? (
+                          <ArrowDown className="size-3" />
+                        ) : (
+                          <ArrowUpDown className="size-3 opacity-40" />
+                        )
+                      ) : null}
+                    </span>
+                  </Th>
+                );
+              })}
               {canEdit || canDelete || rowActions ? <Th className="w-px text-right">Thao tác</Th> : null}
             </tr>
           </thead>

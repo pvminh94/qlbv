@@ -63,6 +63,24 @@ const HANDLER_DESCRIPTIONS: Record<string, string> = {
   'jobs.stats': 'Thống kê số tác vụ định kỳ đang bật',
 };
 
+const JOB_SORTABLE = {
+  code: scheduledJobs.code,
+  name: scheduledJobs.name,
+  handler: scheduledJobs.handler,
+  cron: scheduledJobs.cron,
+  active: scheduledJobs.active,
+  lastRunAt: scheduledJobs.lastRunAt,
+  lastStatus: scheduledJobs.lastStatus,
+  createdAt: scheduledJobs.createdAt,
+} as const;
+
+function jobOrderBy(query: { sortBy?: string; sortDir?: 'asc' | 'desc' }) {
+  const col = JOB_SORTABLE[(query.sortBy ?? '') as keyof typeof JOB_SORTABLE];
+  if (!col) return [asc(scheduledJobs.id)];
+  const dir = query.sortDir === 'desc' ? desc : asc;
+  return [dir(col), asc(scheduledJobs.id)];
+}
+
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnApplicationBootstrap {
   private readonly logger = new Logger(SchedulerService.name);

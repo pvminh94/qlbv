@@ -1,5 +1,6 @@
 import {
   Activity,
+  Bell,
   BarChart3,
   Building2,
   CalendarClock,
@@ -55,7 +56,10 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Tổng quan',
-    items: [{ href: '/dashboard', label: 'Bảng điều khiển', icon: LayoutDashboard, permission: 'dashboard.view' }],
+    items: [
+      { href: '/dashboard', label: 'Bảng điều khiển', icon: LayoutDashboard, permission: 'dashboard.view' },
+      { href: '/thong-bao', label: 'Thông báo', icon: Bell },
+    ],
   },
   {
     label: 'Hồ sơ bệnh án',
