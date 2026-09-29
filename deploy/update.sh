@@ -89,6 +89,9 @@ fi
 # commit trước lần pull này — nếu đã tự `git pull` trước khi chạy script, hoặc lần
 # dựng trước thất bại, thì vẫn biết cần dựng lại.
 STATE_DIR="$ROOT/data"; mkdir -p "$STATE_DIR"
+# uploads/backups gắn bind-mount vào container api (user node = UID 1000) — phải đúng chủ
+mkdir -p data/uploads data/backups
+chown -R 1000:1000 data/uploads data/backups
 needs_build() { # needs_build <svc> <thư-mục>
   local f="$STATE_DIR/.deployed-$1" dep
   [[ -s "$f" ]] || { warn "$1: chưa rõ bản đang chạy → dựng lại"; return 0; }

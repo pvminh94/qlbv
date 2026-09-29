@@ -380,6 +380,9 @@ if [[ ${#fail_ports[@]} -gt 0 ]]; then
   die 'cổng bị chiếm — dừng TRƯỚC khi dựng ảnh để không mất thời gian build.'
 fi
 mkdir -p data/postgres data/redis data/uploads data/backups
+# uploads/backups được bind-mount vào container api chạy bằng user `node` (UID 1000);
+# thư mục vừa tạo ở trên thuộc root → container không ghi được (EACCES mkdir /app/backups/exports)
+chown -R 1000:1000 data/uploads data/backups
 # Font Times New Roman gốc cho bản in PDF (lỗi không làm dừng cài đặt)
 bash deploy/install-times-font.sh --quiet || true
 "${COMPOSE[@]}" up -d --build
