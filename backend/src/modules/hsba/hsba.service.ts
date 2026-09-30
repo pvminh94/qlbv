@@ -32,6 +32,7 @@ import {
   type WorkflowStep,
 } from '../../db/schema';
 import { REQUEST_STATUS_LABELS } from '../../db/schema/types';
+import { signPermissionOf } from './sign-permissions';
 import { buildPage, type AdvancedQueryDto, type Paginated, parseFilters } from '../../common/dto/query.dto';
 import { pushFilters, type FilterTarget } from '../../common/filters/apply-filter';
 import type { AccessContext, ClientMeta } from '../../common/types/access-context';
@@ -202,8 +203,7 @@ export class HsbaService {
         const codes = step.roleCodes ?? [];
         if (codes.some((c) => user.roles.includes(c))) return true;
         // Cho phép nếu có quyền tương ứng với bước (linh hoạt khi không dùng vai trò)
-        const stepPermission = `hsba.request.sign-${step.key.toLowerCase()}`;
-        return user.permissions.includes(stepPermission);
+        return user.permissions.includes(signPermissionOf(step.key));
       }
     }
   }
@@ -750,7 +750,7 @@ export class HsbaService {
 
     await this.writeLog(id, user, 'COMMENT', 'Thêm trao đổi', request.status, request.status, client);
 
-    // Báo cho các bên liên quan: ngườI tạo, ngườI đề nghị, ngườI ký gần nhất — trừ chính ngườI viết
+    // Báo cho các bên liên quan: người tạo, người đề nghị, người ký gần nhất — trừ chính người viết
     const notifyIds = new Set<number>();
     if (request.createdBy !== user.id) notifyIds.add(request.createdBy);
     if (request.requesterId && request.requesterId !== user.id) notifyIds.add(request.requesterId);
@@ -776,7 +776,7 @@ export class HsbaService {
     if (!comment) throw new NotFoundException('Không tìm thấy trao đổi');
     const canModerate = user.isSuperAdmin || user.permissions.includes('hsba.request.delete');
     if (comment.userId !== user.id && !canModerate) {
-      throw new ForbiddenException('Chỉ tác giả hoặc ngườI quản trị phiếu mới xoá được trao đổi');
+      throw new ForbiddenException('Chỉ tác giả hoặc người quản trị phiếu mới xoá được trao đổi');
     }
     await this.db.db
       .update(hsbaComments)
@@ -872,7 +872,7 @@ export class HsbaService {
     const { row, absPath } = await this.readAttachment(id, attachmentId, user);
     const canModerate = user.isSuperAdmin || user.permissions.includes('hsba.request.delete');
     if (row.uploadedBy !== user.id && !canModerate) {
-      throw new ForbiddenException('Chỉ ngườI đăng tệp hoặc ngườI quản trị phiếu mới xoá được');
+      throw new ForbiddenException('Chỉ người đăng tệp hoặc người quản trị phiếu mới xoá được');
     }
     await this.db.db
       .update(hsbaAttachments)
@@ -951,7 +951,7 @@ export class HsbaService {
 
   async create(dto: CreateRequestDto, user: AccessContext, client?: ClientMeta) {
     // Chặn tạo trùng phiếu cho cùng một hồ sơ khi hồ sơ đó còn phiếu ĐANG MỞ —
-    // giao diện phải hiển thị danh sách phiếu đó cho ngườI nhập xác nhận rồi gọi lại với force=true.
+    // giao diện phải hiển thị danh sách phiếu đó cho người nhập xác nhận rồi gọi lại với force=true.
     if (!dto.force) {
       const dups = await this.findOpenDuplicates({
         maKcb: dto.maKcb,
@@ -1069,14 +1069,14 @@ export class HsbaService {
 
   async update(id: number, dto: UpdateRequestDto, user: AccessContext) {
     const current = await this.findOne(id);
-    // Chủ sở hữu phiếu: ngườI tạo hoặc ngườI đề nghị; còn lại phải có quyền điều hành toàn bộ phiếu
+    // Chủ sở hữu phiếu: người tạo hoặc người đề nghị; còn lại phải có quyền điều hành toàn bộ phiếu
     if (
       !user.isSuperAdmin &&
       !user.permissions.includes('hsba.request.view-all') &&
       current.createdBy !== user.id &&
       current.requesterId !== user.id
     ) {
-      throw new ForbiddenException('Chỉ ngườI tạo hoặc ngườI đề nghị mới được sửa phiếu này');
+      throw new ForbiddenException('Chỉ người tạo hoặc người đề nghị mới được sửa phiếu này');
     }
     if (['HOAN_TAT', 'DA_HUY'].includes(current.status)) {
       throw new BadRequestException('Phiếu đã hoàn tất hoặc đã huỷ — không sửa được nội dung');

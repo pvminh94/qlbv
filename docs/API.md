@@ -76,9 +76,9 @@ Tổng **187** endpoint. Đường dẫn đầy đủ có tiền tố `/api`, v�
 | `GET` | `/hsba/requests/:id/pdf` | Kết xuất phiếu ra PDF theo mẫu in cấu hình được | `hsba.request.print` |
 | `POST` | `/hsba/requests` | Tạo phiếu đề nghị sửa HSBA (tự chọn quy trình theo khoa) | `hsba.request.create` |
 | `PUT` | `/hsba/requests/:id` | Cập nhật nội dung phiếu | `hsba.request.update` |
-| `POST` | `/hsba/requests/:id/sign` | Ký ở bước đang chờ (kiểm tra theo cấu hình quy trình) | `hsba.request.sign-requester | hsba.request.sign-khtb | hsba.request.sign-finance` |
-| `POST` | `/hsba/requests/bulk-sign` | Ký nhiều phiếu đang chờ tôi xử lý trong một lần | `hsba.request.sign-requester | hsba.request.sign-khtb | hsba.request.sign-finance` |
-| `POST` | `/hsba/requests/:id/return` | Trả lại phiếu kèm lý do (huỷ chữ ký phía sau) | `hsba.request.return` |
+| `POST` | `/hsba/requests/:id/sign` | Ký ở bước đang chờ (kiểm tra theo cấu hình quy trình) | `hsba.request.sign-requester | hsba.request.sign-khtb | hsba.request.sign-insurance | hsba.request.sign-finance` |
+| `POST` | `/hsba/requests/bulk-sign` | Ký nhiều phiếu đang chờ tôi xử lý trong một lần | `hsba.request.sign-requester | hsba.request.sign-khtb | hsba.request.sign-insurance | hsba.request.sign-finance` |
+| `POST` | `/hsba/requests/:id/return` | Trả lại phiếu kèm lý do (huỷ chữ ký phía sau) — chỉ TB.KHTH và Tr.BP bảo hiểm có quyền này | `hsba.request.return` |
 | `POST` | `/hsba/requests/:id/cancel` | Huỷ phiếu | `hsba.request.cancel` |
 | `PATCH` | `/hsba/requests/:id/restore` | Khôi phục phiếu đã xoá mềm | `hsba.request.delete` |
 | `DELETE` | `/hsba/requests/:id` | Xoá mềm phiếu | `hsba.request.delete` |

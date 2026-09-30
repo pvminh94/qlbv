@@ -19,6 +19,7 @@ import { NotificationCenterService } from '../notifications/notification-center.
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrintingModule } from '../printing/printing.module';
 import { HsbaRequestController, HsbaWorkflowController } from './hsba.controller';
+import { signPermissionOf } from './sign-permissions';
 import { HsbaService } from './hsba.service';
 
 @Injectable()
@@ -126,7 +127,7 @@ export class HsbaQueueHandlers implements OnModuleInit {
    * Vì quyền được gán theo vai trò nên chỉ cần tra bảng trung gian.
    */
   private async usersWhoCanSign(stepKey: string): Promise<number[]> {
-    const permissionCode = `hsba.request.sign-${stepKey.toLowerCase()}`;
+    const permissionCode = signPermissionOf(stepKey);
     const rows = await this.db.db
       .selectDistinct({ userId: userRoles.userId })
       .from(permissions)

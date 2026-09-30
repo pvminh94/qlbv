@@ -78,6 +78,7 @@ export const PERMISSIONS: PermissionSeed[] = [
   P('hsba.request', 'delete', 'Xoá phiếu'),
   P('hsba.request', 'sign-requester', 'Ký với tư cách người đề nghị'),
   P('hsba.request', 'sign-khtb', 'Duyệt / ký TB.KHTH'),
+  P('hsba.request', 'sign-insurance', 'Xác nhận / ký Tr.BP bảo hiểm'),
   P('hsba.request', 'sign-finance', 'Xác nhận tài chính đã hủy thanh toán'),
   P('hsba.request', 'return', 'Trả lại phiếu kèm lý do'),
   P('hsba.request', 'cancel', 'Huỷ phiếu đã tạo'),
@@ -299,6 +300,24 @@ export const ROLES: RoleSeed[] = [
     ],
   },
   {
+    code: 'BAO_HIEM',
+    name: 'Trưởng BP bảo hiểm',
+    description: 'Trưởng bộ phận bảo hiểm: kiểm tra và xác nhận hồ sơ bảo hiểm sau khi TB.KHTH duyệt; được phép trả lại phiếu đề nghị sửa HSBA',
+    dataScope: 'ALL',
+    priority: 20,
+    color: '#7c3aed',
+    isSystem: true,
+    permissions: [
+      'dashboard.view',
+      'studio.dashboard.view', 'studio.report.view',
+      'hsba.request.view', 'hsba.request.view-all',
+      'hsba.request.sign-insurance', 'hsba.request.return', 'hsba.request.comment',
+      'hsba.request.export', 'hsba.request.print',
+      'report.view.view', 'report.export.excel',
+      'utility.view',
+    ],
+  },
+  {
     code: 'TAI_CHINH',
     name: 'Tài chính (huỷ thanh toán)',
     description: 'Xác nhận đã huỷ thanh toán BHYT cho hồ sơ bệnh án trước khi sửa; xem báo cáo công tác',
@@ -310,7 +329,7 @@ export const ROLES: RoleSeed[] = [
       'dashboard.view',
       'studio.dashboard.view', 'studio.report.view',
       'hsba.request.view', 'hsba.request.view-all',
-      'hsba.request.sign-finance', 'hsba.request.return', 'hsba.request.comment',
+      'hsba.request.sign-finance', 'hsba.request.comment',
       'hsba.request.export', 'hsba.request.print',
       'report.view.view', 'report.export.excel',
       'utility.view',
@@ -426,9 +445,10 @@ export const ROLES: RoleSeed[] = [
 
 export const DEFAULT_WORKFLOW = {
   code: 'MAC_DINH',
-  name: 'Quy trình mặc định (Người đề nghị → KHTH → Tài chính)',
+  name: 'Quy trình mặc định (Người đề nghị → KHTH → Bảo hiểm → Tài chính)',
   description:
-    'Ba bước ký xác nhận điện tử: người đề nghị tạo và ký, TB.KHTH duyệt, tài chính xác nhận đã hủy thanh toán.',
+    'Bốn bước ký xác nhận điện tử: người đề nghị tạo và ký, TB.KHTH duyệt, Tr.BP bảo hiểm xác nhận, tài chính xác nhận đã hủy thanh toán.',
+
   steps: [
     {
       key: 'DE_NGHI',
@@ -447,6 +467,17 @@ export const DEFAULT_WORKFLOW = {
       roleCodes: ['KHTB'],
       confirmText:
         'Tôi đã xem xét và DUYỆT / Thông báo cho sửa HSBA điện tử theo nội dung trên.',
+      allowReturn: true,
+      requireNote: false,
+    },
+    {
+      key: 'BAOHIEM',
+      name: 'Tr.BP bảo hiểm xác nhận',
+      title: 'TR.BPBH XÁC NHẬN',
+      kind: 'role',
+      roleCodes: ['BAO_HIEM'],
+      confirmText:
+        'Tôi đã kiểm tra hồ sơ bảo hiểm liên quan và ĐỒNG Ý cho sửa HSBA điện tử theo nội dung trên.',
       allowReturn: true,
       requireNote: false,
     },
@@ -691,6 +722,7 @@ export function defaultHsbaPrintDocument(): PrintDocument {
       { key: 'request.content', label: 'Nội dung đề nghị', type: 'text', group: 'Nội dung' },
       { key: 'signature.DE_NGHI.fullName', label: 'Người đề nghị ký', type: 'text', group: 'Chữ ký' },
       { key: 'signature.KHTB.fullName', label: 'TB.KHTH ký', type: 'text', group: 'Chữ ký' },
+      { key: 'signature.BAOHIEM.fullName', label: 'Tr.BPBH ký', type: 'text', group: 'Chữ ký' },
       { key: 'signature.TAICHINH.fullName', label: 'Tài chính ký', type: 'text', group: 'Chữ ký' },
     ],
     header: { height: 0, elements: [] },
@@ -754,17 +786,21 @@ export function defaultHsbaPrintDocument(): PrintDocument {
 
           // ---------- Chữ ký
           text('sec-sign', 25, 175, 160, 7, 'III. XÁC NHẬN ĐIỆN TỬ', { bold: true, fontSize: 13 }),
-          text('sig-1-title', 20, 185, 55, 6, 'NGƯỜI ĐỀ NGHỊ SỬA HSBA', { bold: true, fontSize: 11, align: 'center' }),
-          text('sig-1-name', 20, 202, 55, 6, '{signature.DE_NGHI.fullName}', { fontSize: 12, align: 'center' }),
-          text('sig-1-time', 20, 208, 55, 6, '{signature.DE_NGHI.signedAt}', { fontSize: 10, align: 'center' }),
+          text('sig-1-title', 15, 185, 45, 6, 'NGƯỜI ĐỀ NGHỊ SỬA HSBA', { bold: true, fontSize: 10, align: 'center' }),
+          text('sig-1-name', 15, 202, 45, 6, '{signature.DE_NGHI.fullName}', { fontSize: 11, align: 'center' }),
+          text('sig-1-time', 15, 208, 45, 6, '{signature.DE_NGHI.signedAt}', { fontSize: 9, align: 'center' }),
 
-          text('sig-2-title', 80, 185, 55, 6, 'DUYỆT/ TB.KHTH', { bold: true, fontSize: 11, align: 'center' }),
-          text('sig-2-name', 80, 202, 55, 6, '{signature.KHTB.fullName}', { fontSize: 12, align: 'center' }),
-          text('sig-2-time', 80, 208, 55, 6, '{signature.KHTB.signedAt}', { fontSize: 10, align: 'center' }),
+          text('sig-2-title', 63, 185, 45, 6, 'DUYỆT/ TB.KHTH', { bold: true, fontSize: 10, align: 'center' }),
+          text('sig-2-name', 63, 202, 45, 6, '{signature.KHTB.fullName}', { fontSize: 11, align: 'center' }),
+          text('sig-2-time', 63, 208, 45, 6, '{signature.KHTB.signedAt}', { fontSize: 9, align: 'center' }),
 
-          text('sig-3-title', 140, 185, 55, 6, 'TC XÁC NHẬN ĐÃ HỦY TT', { bold: true, fontSize: 11, align: 'center' }),
-          text('sig-3-name', 140, 202, 55, 6, '{signature.TAICHINH.fullName}', { fontSize: 12, align: 'center' }),
-          text('sig-3-time', 140, 208, 55, 6, '{signature.TAICHINH.signedAt}', { fontSize: 10, align: 'center' }),
+          text('sig-3-title', 111, 185, 45, 6, 'TR.BPBH XÁC NHẬN', { bold: true, fontSize: 10, align: 'center' }),
+          text('sig-3-name', 111, 202, 45, 6, '{signature.BAOHIEM.fullName}', { fontSize: 11, align: 'center' }),
+          text('sig-3-time', 111, 208, 45, 6, '{signature.BAOHIEM.signedAt}', { fontSize: 9, align: 'center' }),
+
+          text('sig-4-title', 159, 185, 45, 6, 'TC HỦY THANH TOÁN', { bold: true, fontSize: 10, align: 'center' }),
+          text('sig-4-name', 159, 202, 45, 6, '{signature.TAICHINH.fullName}', { fontSize: 11, align: 'center' }),
+          text('sig-4-time', 159, 208, 45, 6, '{signature.TAICHINH.signedAt}', { fontSize: 9, align: 'center' }),
 
           text('footer-date', 100, 220, 80, 6, 'Ngày {system.day} tháng {system.month} năm {system.year}', {
             italic: true,

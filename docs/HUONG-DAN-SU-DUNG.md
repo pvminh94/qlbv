@@ -32,18 +32,29 @@ bảng, điện thoại đều dùng được), đăng nhập bằng tài khoả
 1. Menu **Hồ sơ bệnh án**, bật *Chờ tôi xử lý*.
 2. Mở phiếu → xem nội dung, nhật ký và các bước ký.
 3. Chọn một trong hai:
-   * **Duyệt**: bấm *Ký bước này*, có thể ghi ý kiến; phiếu chuyển sang Tài chính.
+   * **Duyệt**: bấm *Ký bước này*, có thể ghi ý kiến; phiếu chuyển sang bước Bảo hiểm.
    * **Trả lại**: bấm *Trả lại*, ghi rõ lý do; phiếu quay về người đề nghị và mọi chữ
      ký cũ bị huỷ (ghi vào nhật ký).
 4. Ký nhiều phiếu cùng lúc: chọn các phiếu ở danh sách → **Ký hàng loạt**.
 
-## 3. Tài chính (vai trò `TAI_CHINH`)
+## 3. Bảo hiểm – Trưởng BP bảo hiểm (vai trò `BAO_HIEM`)
+
+1. Menu **Hồ sơ bệnh án**, bật *Chờ tôi xử lý*; mở phiếu đang ở bước
+   *Chờ Tr.BP bảo hiểm xác nhận*.
+2. Rà soát nội dung liên quan bảo hiểm rồi chọn một trong hai:
+   * **Xác nhận**: bấm *Ký bước này*; phiếu chuyển sang Tài chính.
+   * **Trả lại**: bấm *Trả lại*, ghi rõ lý do; phiếu quay về người đề nghị.
+
+> Chỉ **TB.KHTH** và **Tr.BP bảo hiểm** được trả lại phiếu — Tài chính chỉ ký
+> xác nhận ở bước cuối, không được trả lại.
+
+## 4. Tài chính (vai trò `TAI_CHINH`)
 
 1. Mở phiếu đang ở bước *Chờ TC xác nhận hủy thanh toán*.
 2. Đối chiếu số tiền và giao dịch BHYT; sau khi đã hủy thanh toán trên phần mềm kế toán,
    bấm **Ký bước này** để xác nhận. Phiếu chuyển sang trạng thái **Hoàn tất**.
 
-## 4. Nhập số liệu báo cáo của khoa (vai trò `TRUONG_KHOA`, `NHAP_BAO_CAO`)
+## 5. Nhập số liệu báo cáo của khoa (vai trò `TRUONG_KHOA`, `NHAP_BAO_CAO`)
 
 1. Menu **Báo cáo → Nhập số liệu**; chọn **mẫu báo cáo** của khoa.
 2. Chọn **kỳ** (ngày / tuần / tháng / quý / năm / khoảng ngày / toàn bộ) rồi bấm *Tải số liệu*.
@@ -53,7 +64,7 @@ bảng, điện thoại đều dùng được), đăng nhập bằng tài khoả
 5. Có thể dán số liệu từ Excel theo hướng dẫn ở cột *Dán từ Excel* hoặc nhập một lần
    cho cả kỳ bằng tuỳ chọn *Nhập cho cả kỳ*.
 
-## 5. Xem báo cáo & chốt số liệu
+## 6. Xem báo cáo & chốt số liệu
 
 **Một khoa** — **Báo cáo**: chọn mẫu, kỳ, bấm *Xem báo cáo*; kết xuất
 **Excel / Word / PDF** hoặc **In báo cáo**.
@@ -77,14 +88,14 @@ danh sách khoa chưa nhập số liệu trong kỳ.
   thống với thao tác `UNLOCK`. Khi bản chốt còn *Đã khoá*, ô nhập số liệu của kỳ đó bị
   chặn kèm cảnh báo màu vàng — tránh sửa nhầm số đã báo cáo.
 
-## 6. Trưởng khoa / Ban giám đốc
+## 7. Trưởng khoa / Ban giám đốc
 
 * **Bảng điều khiển**: số phiếu theo trạng thái, số phiếu bị trả lại, tình hình nhập
   số liệu của các khoa, tác vụ sắp chạy và nhật ký gần nhất — phạm vi dữ liệu theo
   vai trò được gán.
 * Duyệt số liệu: theo dõi bảng *Tổng hợp toàn viện* để biết khoa nào chưa nhập.
 
-## 7. Quản trị hệ thống (vai trò `ADMIN`)
+## 8. Quản trị hệ thống (vai trò `ADMIN`)
 
 | Việc | Đường dẫn |
 |---|---|
@@ -109,7 +120,7 @@ danh sách khoa chưa nhập số liệu trong kỳ.
 - Tài khoản mới dùng mật khẩu mặc định `1`, bắt buộc đổi khi đăng nhập lần đầu. Chọn “Ghi đè” để cập nhật tài khoản đã có (không đổi mật khẩu, ô trống không xoá dữ liệu cũ).
 - Tệp CSV/TXT: UTF-8, UTF-16 (Excel “Unicode Text”) hoặc Windows-1258; phân cách bằng `,` `;` Tab hoặc `|`. Tệp `.xls` cũ cần lưu lại thành `.xlsx`. Tối đa 5000 dòng / 10 MB mỗi lần.
 
-## 7b. Quản lý tài sản (vai trò `QL_TAI_SAN`; trưởng khoa xem & đề nghị)
+## 8b. Quản lý tài sản (vai trò `QL_TAI_SAN`; trưởng khoa xem & đề nghị)
 
 Menu **Quản lý tài sản**: Tổng quan · Danh sách · Chứng từ · Kiểm kê · Khấu hao · Lịch bảo trì · Báo cáo · In tem · Quét mã · Danh mục.
 
@@ -130,7 +141,7 @@ Menu **Quản lý tài sản**: Tổng quan · Danh sách · Chứng từ · Ki�
 6. **Quét mã**: máy quét USB/Bluetooth gõ mã + Enter, hoặc bấm biểu tượng camera (Chrome/Edge/Android).
 7. Hồ sơ tài sản đã phát sinh chứng từ/khấu hao sẽ **khoá** nguyên giá, khoa, người giữ, trạng thái — muốn đổi phải lập chứng từ để đảm bảo sổ sách.
 
-## 7c. Bảng điều khiển & báo cáo tuỳ biến (Studio)
+## 8c. Bảng điều khiển & báo cáo tuỳ biến (Studio)
 
 Hệ thống có sẵn **bộ công cụ kéo-thả** (giống Power BI thu nhỏ): mọi người đều tự
 dựng trang tổng quan và báo cáo của riêng mình từ các nguồn dữ liệu được cấp quyền,
@@ -161,7 +172,7 @@ cập nhật ngay khi có thay đổi (kết nối thời gian thực qua SSE), 
    engine" — câu hỏi chỉ gồm tên nguồn + chỉ số theo từ khoá cho phép, không SQL tự
    do; người xem thiếu quyền nguồn sẽ thấy ô trống thay vì số liệu.
 
-## 8. Câu hỏi thường gặp
+## 9. Câu hỏi thường gặp
 
 **Tôi không thấy menu nào?** Menu được cấp theo quyền — liên hệ quản trị để được gán
 vai trò phù hợp. Menu **Tiện ích** hiển thị theo cấu hình *Quản trị → Tiện ích*.
@@ -216,7 +227,7 @@ thống có thể yêu cầu đổi mật khẩu.
 
 ---
 
-## 11. Trung tâm thông báo
+## 10. Trung tâm thông báo
 
 Hệ thống thông báo 3 lớp giúp không bỏ lỡ biến động của phiếu/hồ sơ:
 

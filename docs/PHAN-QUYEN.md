@@ -48,7 +48,8 @@ toàn viện, và không bị trừ quyền bởi bất kỳ cấu hình nào.
 | Quản trị hệ thống | `ADMIN` | Toàn viện | 10 | 76 | Vận hành: dashboard, studio, department, job_title, user, role, hsba, report, print, utility, job, audit, setting, data, backup, file, asset — KHÔNG có backup.restore, setting.update và quyền nghiệp vụ |
 | Ban giám đốc / Lãnh đạo xét duyệt | `LANH_DAO` | Toàn viện | 15 | 30 | dashboard, studio, hsba, report, asset, print, utility |
 | Duyệt — TB.KHTH | `KHTB` | Toàn viện | 20 | 22 | dashboard, studio, hsba, report, print, utility |
-| Tài chính (huỷ thanh toán) | `TAI_CHINH` | Toàn viện | 20 | 13 | dashboard, studio, hsba, report, utility |
+| Bảo hiểm (xác nhận BH) | `BAO_HIEM` | Toàn viện | 20 | 13 | dashboard, studio, hsba, report, print, utility |
+| Tài chính (huỷ thanh toán) | `TAI_CHINH` | Toàn viện | 20 | 12 | dashboard, studio, hsba, report, utility |
 | Quản lý tài sản | `QL_TAI_SAN` | Toàn viện | 25 | 28 | dashboard, studio, asset, print, utility, file |
 | Trưởng khoa | `TRUONG_KHOA` | Theo khoa | 30 | 26 | dashboard, studio, report, print, hsba, asset, utility, file |
 | Người đề nghị sửa HSBA | `NHAP_LIEU` | Cá nhân | 40 | 11 | dashboard, studio, hsba, file, utility |
@@ -81,11 +82,17 @@ Toàn bộ quyền ngầm — không cần liệt kê; chỉ Quản trị tối 
 
 `dashboard.view` · `dashboard.view-all` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.view-all` · `hsba.request.sign-khtb` · `hsba.request.return` · `hsba.request.comment` · `hsba.request.export` · `hsba.request.print` · `report.view.view` · `report.view.all-departments` · `report.summary.view` · `report.export.excel` · `report.export.word` · `report.export.pdf` · `report.snapshot.approve` · `report.snapshot.lock` · `print.render.view` · `print.render.export` · `utility.view`
 
+### Bảo hiểm (xác nhận BH) (`BAO_HIEM`)
+
+> Trưởng BP bảo hiểm: xác nhận phần bảo hiểm của phiếu đề nghị sửa hồ sơ bệnh án (bước ký giữa TB.KHTH và Tài chính); được trả lại phiếu
+
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.view-all` · `hsba.request.sign-insurance` · `hsba.request.return` · `hsba.request.comment` · `hsba.request.export` · `hsba.request.print` · `report.view.view` · `report.export.excel` · `utility.view`
+
 ### Tài chính (huỷ thanh toán) (`TAI_CHINH`)
 
-> Xác nhận đã huỷ thanh toán BHYT cho hồ sơ bệnh án trước khi sửa; xem báo cáo công tác
+> Xác nhận đã huỷ thanh toán BHYT cho hồ sơ bệnh án trước khi sửa; xem báo cáo công tác — KHÔNG được trả lại phiếu (chỉ TB.KHTH và Tr.BP bảo hiểm)
 
-`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.view-all` · `hsba.request.sign-finance` · `hsba.request.return` · `hsba.request.comment` · `hsba.request.export` · `hsba.request.print` · `report.view.view` · `report.export.excel` · `utility.view`
+`dashboard.view` · `studio.dashboard.view` · `studio.report.view` · `hsba.request.view` · `hsba.request.view-all` · `hsba.request.sign-finance` · `hsba.request.comment` · `hsba.request.export` · `hsba.request.print` · `report.view.view` · `report.export.excel` · `utility.view`
 
 ### Quản lý tài sản (`QL_TAI_SAN`)
 
