@@ -44,9 +44,14 @@ export const useAuth = create<AuthState>((set, get) => ({
       return user;
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode;
-      if (status === 401 || status === 403) tokenStore.clear();
-      set({ user: null });
-      return null;
+      // Chỉ coi là "hết phiên" khi máy chủ nói rõ 401/403 — lỗi mạng thì ném ra
+      // để layout hiện "thử lại" thay vì đăng xuất oan.
+      if (status === 401 || status === 403) {
+        tokenStore.clear();
+        set({ user: null });
+        return null;
+      }
+      throw err;
     }
   },
 

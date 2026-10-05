@@ -13,6 +13,12 @@ export function notifyMaintenance(detail: unknown): void {
   if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(MAINTENANCE_EVENT, { detail }));
 }
 
+/** Sự kiện phát ra khi phiên đăng nhập hết hạn và làm mới cũng thất bại — ProtectedLayout đưa về /login */
+export const SESSION_EXPIRED_EVENT = 'qlbs:session-expired';
+export function notifySessionExpired(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+}
+
 const ACCESS_KEY = 'qlbs_access_token';
 const REFRESH_KEY = 'qlbs_refresh_token';
 
@@ -126,6 +132,7 @@ export async function apiFetch<T = unknown>(path: string, options: Options = {})
     const ok = await tryRefresh();
     if (ok) return apiFetch<T>(path, { ...options, noRetry: true });
     tokenStore.clear();
+    notifySessionExpired();
   }
 
   const contentType = response.headers.get('content-type') ?? '';

@@ -79,16 +79,21 @@ export function Topbar({ onOpenMenu }: { onOpenMenu: () => void }) {
     e.preventDefault();
     const kw = keyword.trim();
     if (!kw) return;
+    // Tra cứu nhanh mã tài sản: giới hạn 2 giây — nếu mạng/máy chủ chậm thì bỏ qua
+    // và rơi về tìm kiếm thường, không để thanh tìm kiếm "đơ" im lặng.
     if (canAsset && !/\s/.test(kw) && kw.length >= 3) {
       try {
-        const hit = await apiFetch<{ id: number }>(`/assets/lookup/${encodeURIComponent(kw)}`);
+        const hit = await Promise.race([
+          apiFetch<{ id: number }>(`/assets/lookup/${encodeURIComponent(kw)}`),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000)),
+        ]);
         if (hit?.id) {
           setKeyword('');
           router.push(`/tai-san/${hit.id}`);
           return;
         }
       } catch {
-        /* không phải mã tài sản → tìm theo từ khoá */
+        /* không phải mã tài sản hoặc quá chậm → tìm theo từ khoá */
       }
     }
     if (canAsset && (inAssets || !canHsba)) {
