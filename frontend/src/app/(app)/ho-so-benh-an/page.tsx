@@ -138,6 +138,16 @@ function RequestsContent() {
     setPage(1);
   }, [qParam]);
 
+  // Gõ vào ô là tự lọc sau 350ms (Enter vẫn lọc ngay); xoá hết chữ → danh sách
+  // tự hiện lại đầy đủ, không cần bấm nút Xoá lọc
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setPage(1);
+      setSearch(keyword.trim());
+    }, 350);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
   const { data: departmentOptions } = useQuery({
     queryKey: ['departments-options'],
     queryFn: () => apiFetch<{ id: number; name: string; level: number }[]>('/departments/options'),
@@ -363,8 +373,23 @@ function RequestsContent() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="Tên người bệnh, mã KCB, mã thẻ BHYT, số phiếu…"
-              className="h-8.5 w-80 pl-8 text-sm"
+              className="h-8.5 w-80 pl-8 pr-7 text-sm"
             />
+            {keyword ? (
+              <button
+                type="button"
+                aria-label="Xoá từ khoá tìm kiếm"
+                title="Xoá từ khoá — hiện lại toàn bộ"
+                onClick={() => {
+                  setKeyword('');
+                  setSearch('');
+                  setPage(1);
+                }}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
+              >
+                <X className="size-3.5" />
+              </button>
+            ) : null}
           </form>
 
           <label className="flex items-center gap-1.5 text-xs">
