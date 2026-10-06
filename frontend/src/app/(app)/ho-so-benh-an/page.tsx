@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { apiFetch, openFileUrl } from '@/lib/api';
+import { useRealtimeInvalidate } from '@/lib/realtime';
 import { useAuth } from '@/lib/auth';
 import { cn, formatDate, formatNumber, toList } from '@/lib/utils';
 import type { Paginated } from '@/types/api';
@@ -98,6 +99,9 @@ function RequestsContent() {
   const params = useSearchParams();
   const can = useAuth((s) => s.can);
   const queryClient = useQueryClient();
+  // Realtime: tài khoản khác tạo/ký/trả phiếu → backend phát sự kiện 'hsba' →
+  // React Query tự nạp lại danh sách + thống kê, phiếu mới đổ vào ngay không cần F5
+  useRealtimeInvalidate({ hsba: [['hsba-requests'], ['hsba-stats']] });
   /** Ký nhanh: chỉ hiện khi ngườI dùng có ít nhất một quyền ký */
   const canSomeSign = useMemo(() => {
     try {
