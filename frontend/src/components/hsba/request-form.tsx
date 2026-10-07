@@ -261,17 +261,7 @@ export function HsbaRequestForm({
           />
           <FieldError message={errors?.content} />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="amount">Số tiền liên quan (đồng)</Label>
-            <Input id="amount" value={value.amount ?? ''} onChange={(e) => set('amount', e.target.value)} placeholder="1250000" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="attachmentsNote">Tài liệu kèm theo</Label>
-            <Input id="attachmentsNote" value={value.attachmentsNote ?? ''} onChange={(e) => set('attachmentsNote', e.target.value)} placeholder="Bản sao hồ sơ giấy…" />
-          </div>
-        </div>
-      </section>
+              </section>
 
       {selectedRequester ? (
         <p className="rounded-lg border bg-[var(--muted)]/50 p-3 text-[11px] text-[var(--muted-foreground)]">
