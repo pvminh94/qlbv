@@ -250,7 +250,7 @@ export const dutyLogs = pgTable(
   'duty_logs',
   {
     id: serial('id').primaryKey(),
-    periodId: integer('period_id').references(() => dutyPeriods.id, { onDelete: 'cascade' }),
+    periodId: integer('period_id').references(() => dutyPeriods.id, { onDelete: 'set null' }),
     /** Không khoá ngoại: giữ lịch sử kể cả khi ô đã bị xoá */
     slotId: integer('slot_id'),
     requestId: integer('request_id'),

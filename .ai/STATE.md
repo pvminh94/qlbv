@@ -92,6 +92,7 @@
 | — | HSBA: danh sách phiếu tự cập nhật realtime | 3355ad1 |
 | — | HSBA: bỏ ô "Số tiền liên quan" và "Tài liệu kèm theo" khỏi form phiếu | 986e204 |
 | 14 | **Lịch trực khám bệnh**: kỳ lịch tuần, ô trực, ràng buộc (nghỉ tối thiểu, giờ/ngày, giờ/tuần, chức danh, nghỉ phép, khác khoa), tự đăng ký, nhường/đổi, ngoại lệ gửi KHTH, điều chỉnh trực tiếp, chốt theo mốc, nhật ký, Excel, thông báo và realtime | (commit này) |
+| 14b | **Lịch trực — siết chặt, xoá cả kỳ, bảng màu ca, giao diện ngọc lam**: xoá cả kỳ lịch có kiểm soát (lý do, gõ lại tên, chặn khi đã có ca đã diễn ra, nhật ký giữ lại, báo người bị ảnh hưởng); bảng màu ca; ràng buộc chặt hơn (không trùng kỳ, ngày nghỉ, ca/vai trò đang dùng, nghỉ phép); tổng hợp giờ và nhật ký chỉ quản lý; migration 0016–0017 | (commit kế tiếp, sau 3deb70b) |
 
 Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-label].json.gz` v2.
 
@@ -113,11 +114,28 @@ Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-lab
 - Khoá: transaction + `FOR UPDATE` trên ô + `pg_advisory_xact_lock(9301, userId)`, luôn theo thứ tự id tăng dần; truyền `tx` vào hàm nội bộ.
 - Migration `backend/drizzle/0015_lich_truc.sql` (idempotent: bảng, khoá, quyền `duty.*`, vai trò `DIEU_PHOI_TRUC` và `NHAN_VIEN_TRUC`, gán quyền cho vai trò cũ). Seed: `seed-data.ts` (quyền, vai trò, danh mục mặc định `DEFAULT_DUTY_*`) và `scripts/seed.ts` (`seedDutyCatalog`, chỉ thêm mục còn thiếu).
 - Từ điển dữ liệu: ghi chú các bảng/cột `duty_*` nằm trong `backend/src/db/schema-comments.ts`.
-- Kiểm thử: `node .ai/examples/duty-api-test.mjs` (API :4000, 77 kiểm tra, tạo dữ liệu mới mỗi lần chạy) và `.ai/examples/duty-ui-test.mjs` (Playwright, chụp ảnh `/tmp/shots`, báo lỗi console).
+- Migration `0016_lich_truc_xoa_ky.sql` (nhật ký giữ khi xoá kỳ: FK `ON DELETE SET NULL`; ràng buộc `NOT VALID`: ngày bắt đầu ≤ kết thúc, màu dạng #RRGGBB) và `0017_lich_truc_mau_ca.sql` (đổi màu mặc định cũ của S/C/CD/D sang bảng màu mới; ca đã đổi màu giữ nguyên).
+- Xoá cả kỳ: `POST /duty/periods/:id/delete` (quyền `duty.period.manage`, body `{reason, confirmName}`); khoá tư vấn `pg_advisory_xact_lock(9300)` khi tạo/đổi khoảng ngày kỳ lịch.
+- Giao diện: bảng màu `frontend/src/components/shared/color-picker.tsx` (kiểu `color` của CrudTable, `SHIFT_PALETTE` trong `lib/duty.ts`); hộp thoại `components/duty/delete-period-dialog.tsx`; lớp chủ đề `.duty-theme` (layout `/lich-truc`) trong `globals.css`.
+- Kiểm thử: `node .ai/examples/duty-api-test.mjs` (API :4000, 94 kiểm tra, tự dọn dữ liệu kiểm thử sót, chạy lặp được) và `.ai/examples/duty-ui-test.mjs` (Playwright, chụp ảnh `/tmp/shots`, kiểm tra quyền hiển thị, bảng màu không tràn, hộp thoại xoá; báo lỗi console).
 
 ## 6. Việc đang mở / đề xuất
 
-### Yêu cầu 14 (đã làm trong lượt này): Lịch trực khám bệnh
+### Yêu cầu 14b (lượt này): siết ràng buộc, xoá cả kỳ lịch, bảng màu ca, giao diện ngọc lam
+Nguyên văn (tóm): người dùng đồng ý phương án đề xuất (nhân viên thường chỉ đăng ký/nhường/đổi ca của mình; tổng hợp giờ và trang quản lý chỉ người quản lý); chọn màu ca bằng bảng màu thay vì gõ mã; cho xoá cả kỳ lịch (trước đây chỉ xoá được kỳ nháp rỗng); tối ưu ràng buộc và logic cho chặt chẽ; giao diện tông màu tươi mát, phù hợp y khoa.
+
+**Đã làm:**
+- Quyền: nhân viên thường không vào được trang Kỳ lịch và Danh mục (kể cả nhập URL); tổng hợp giờ (`/periods/:id/summary`), tab Giờ trực và nhật ký chỉ người quản lý. Nghỉ phép vẫn do nhân viên tự khai (chọn theo khuyến nghị).
+- Xoá cả kỳ lịch: `POST /duty/periods/:id/delete {reason, confirmName}`; chặn nếu đã có ca đã diễn ra hoặc đang diễn ra; báo nhân viên đã được xếp (kỳ đã công bố); nhật ký giữ lại (`duty_logs.period_id` về NULL, hành động `PERIOD_DELETE`).
+- Ràng buộc mới: kỳ không trùng ngày (khoá tư vấn 9300); mở đăng ký trước mốc chốt; không đánh dấu ngày nghỉ khi đã có ô; không đổi giờ/ca đêm của ca đang dùng; không đổi chức danh của vai trò đang dùng; nghỉ phép không trùng khoảng đã khai và không khai ngày đã qua; CHECK ngày và màu (NOT VALID).
+- Màu ca: bảng 12 màu (`SHIFT_PALETTE`) + "Màu khác"; mặc định ca mới ngọc lam `#0F766E`; migration 0017 đổi màu mặc định cũ của S/C/CD/D.
+- Giao diện: lớp `.duty-theme` cho khu Lịch trực (nút chính, banner, chỉ số, dải nền ngọc lam nhạt); hộp thoại xoá kỳ có cảnh báo và gõ lại tên.
+
+**Kiểm thử đã chạy:** `npm test` 20/20 (thêm `rangesOverlap`); `duty-api-test.mjs` 94/94 (chạy lặp hai lần đều đạt); `duty-ui-test.mjs` 7/7, không lỗi console; `tsc` backend và frontend, `nest build`, `next build` đạt; migrate 0016–0017 áp dụng trên DB phát triển; nhật ký `PERIOD_DELETE` còn sau khi xoá kỳ.
+
+**Chưa làm / lưu ý:** đã push lên `main` (xem mục chờ người dùng); VPS chưa cập nhật; chưa bấm thử trên trình duyệt thật các luồng xếp người, nhường, duyệt (đã kiểm qua API).
+
+### Yêu cầu 14 (đã làm): Lịch trực khám bệnh
 Nguyên văn (tóm): đọc STATE và codebase `pvminh94/qlbv`; viết trang "lịch trực khám bệnh" để nhập lịch trực; đầy đủ tính năng chuẩn chuyên nghiệp; có thời gian chốt lịch; khi sự cố đổi người trực ngoài dự kiến thì báo KHTH, KHTH có tài khoản đổi trực để xử lý ngoại lệ; chủ động thêm ràng buộc thực tế; cấu hình linh động (danh mục phòng khám và danh mục ca trực); giao diện thương mại, đẹp, responsive; thông suốt.
 
 **Đã làm:** backend, migration, quyền, vai trò, danh mục mặc định, từ điển dữ liệu, giao diện `/lich-truc/*` (lưới tuần; trên điện thoại hiển thị theo ngày), nhóm menu "Lịch trực", tài liệu `docs/API.md` (mục Lịch trực), `PHAN-QUYEN.md` (§8), `KIEN-TRUC.md` (§8), `HUONG-DAN-SU-DUNG.md` (§11).
@@ -136,6 +154,10 @@ Nguyên văn (tóm): đọc STATE và codebase `pvminh94/qlbv`; viết trang "l�
 - Giai đoạn 2 (chưa bắt đầu): máy chủ sinh trắc học (khuôn mặt…), dashboard quản lý máy chủ, app tại máy phòng bác sĩ. Điểm tích hợp đã định: "ai đang trực phòng X tại thời điểm T" từ `duty_assignments` ⋈ `duty_slots` ⋈ `duty_shift_types`.
 
 ### Việc chờ người dùng
+- **Cập nhật VPS**: commit đã push lên `main`; VPS chưa cập nhật. Chạy `cd /opt/qlbs && sudo bash deploy/update.sh --backup` (migration 0015–0017 chạy khi container khởi động).
+- **Thu hồi GitHub token**: token dùng để push phiên này đã được dán trong chat, nên cần thu hồi. Token không được lưu trong sandbox, git remote hay repo.
+- **Chính sách xoá kỳ đã có ca**: hiện chặn (409) nếu có phân công có ngày ≤ hôm nay (giờ Bangkok). Chờ người dùng quyết định có cho phép xoá không và điều kiện.
+- **Đã chọn theo khuyến nghị** (người dùng đồng ý, không trả lời form): nhân viên thường tự khai nghỉ phép; tổng hợp giờ trực chỉ người quản lý xem.
 - **Dự án máy phòng khám mở khoá tự động** (ngoài repo, `/home/user/phongkham-unlock/`): vẫn còn hiệu lực, chưa là trọng tâm. Chưa trả lời: (a) phần mềm khám bệnh là app cài máy hay web; (b) bác sĩ có tài khoản riêng hay dùng chung; (c) iPhone hay Android, có chấp nhận Face ID hoặc vân tay; (d) hostname nội bộ và chứng chỉ HTTPS; (e) dải IP Wi-Fi nhân viên; (f) xác nhận S = sáng, C = chiều, ô không tiền tố = cả ngày, có lấy Thứ 7 không, mốc 12:00; (g) số phòng chính xác; (h) có VM Windows 10 Pro không; (i) khi bác sĩ rời phòng có cần khoá lại không. Ràng buộc đã biết: không webcam, không Bluetooth, Windows 10 Pro, tự code (không dựa Assigned Access hay Shell Launcher); mở máy chỉ khi đúng bác sĩ được xếp đúng phòng và đúng ca; mỗi yêu cầu dùng một lần, hạn khoảng 60 giây; có nhật ký.
 - **Chưa rõ:** có gộp phần tài liệu và tài sản đang dở trong `STATE.md` thành một mục hay không.
 

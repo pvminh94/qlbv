@@ -13,6 +13,7 @@ import {
   PeriodQueryDto,
   PublishDto,
   SlotDto,
+  DeletePeriodDto,
   UnlockDto,
   UpdatePeriodDto,
   UpdateSlotDto,
@@ -94,11 +95,15 @@ export class DutyController {
     return this.service.updatePeriod(user, id, dto);
   }
 
-  @Delete('periods/:id')
+  @Post('periods/:id/delete')
   @RequirePermissions('duty.period.manage')
-  @Audit({ module: 'DUTY', action: 'DELETE', entity: 'duty_period', description: 'Xoá kỳ lịch nháp' })
-  deletePeriod(@CurrentUser() user: AccessContext, @Param('id', ParseIntPipe) id: number) {
-    return this.service.deletePeriod(user, id);
+  @Audit({ module: 'DUTY', action: 'DELETE', entity: 'duty_period', description: 'Xoá cả kỳ lịch (có lý do, gõ lại tên kỳ)' })
+  deletePeriod(
+    @CurrentUser() user: AccessContext,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: DeletePeriodDto,
+  ) {
+    return this.service.deletePeriod(user, id, dto);
   }
 
   @Post('periods/:id/publish')

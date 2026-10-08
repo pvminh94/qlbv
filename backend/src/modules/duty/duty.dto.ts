@@ -597,3 +597,19 @@ export class CandidateQueryDto {
   @MaxLength(80)
   q?: string;
 }
+
+export class DeletePeriodDto {
+  @ApiProperty({ example: 'Nhập sai khoảng ngày, sẽ lập lại kỳ mới' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(5, { message: 'Vui lòng nêu lý do xoá kỳ lịch (tối thiểu 5 ký tự)' })
+  @MaxLength(300, { message: 'Lý do tối đa 300 ký tự' })
+  reason!: string;
+
+  @ApiProperty({ description: 'Gõ lại đúng tên kỳ lịch để xác nhận' })
+  @Transform(trim)
+  @IsString()
+  @MinLength(1, { message: 'Vui lòng gõ lại tên kỳ lịch để xác nhận' })
+  @MaxLength(200)
+  confirmName!: string;
+}

@@ -140,3 +140,32 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .notify-toast { animation: none; }
 }
+
+/* ───────── Lịch trực khám bệnh: bảng màu tươi mát, dịu mắt, phù hợp y khoa.
+   Chỉ áp dụng trong khu vực Lịch trực (lớp .duty-theme); các module khác không đổi. */
+.duty-theme {
+  --primary: #0f766e;
+  --primary-foreground: #ffffff;
+  --accent: #ecfeff;
+  --accent-foreground: #155e75;
+  --ring: #2dd4bf;
+  --duty-mint: #e6faf6;
+  background-image: linear-gradient(180deg, var(--duty-mint) 0px, transparent 320px);
+  --duty-sky: #f0f9ff;
+  --duty-sand: #fffbeb;
+  --duty-rose: #fff1f2;
+  --duty-line: #ccfbf1;
+}
+.dark .duty-theme {
+  --primary: #2dd4bf;
+  --primary-foreground: #042f2e;
+  --accent: #164e63;
+  --accent-foreground: #cffafe;
+  --ring: #5eead4;
+  --duty-mint: #0c2b2a;
+  background-image: linear-gradient(180deg, var(--duty-mint) 0px, transparent 320px);
+  --duty-sky: #0b2535;
+  --duty-sand: #2b2410;
+  --duty-rose: #2d1419;
+  --duty-line: #134e4a;
+}

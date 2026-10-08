@@ -5,6 +5,7 @@ import { CalendarPlus, Download, Eye, Lock, Pencil, Plus, Send, Trash2, Unlock, 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useRefreshDuty } from "@/components/duty/duty-dialogs";
+import { DeletePeriodDialog } from "@/components/duty/delete-period-dialog";
 import { errorText, KpiTile, PhaseBadge, ShiftChip } from "@/components/duty/duty-shared";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -393,13 +394,16 @@ export default function KyLichPage() {
   const [unlockAt, setUnlockAt] = useState(isoToBkkLocal(new Date(Date.now() + 24 * 3600e3).toISOString()));
   const [tab, setTab] = useState("slots");
   const [deleteSlot, setDeleteSlot] = useState<GridSlot | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const canManage = can("duty.period.manage");
+  /** Giờ trực tổng hợp và nhật ký chỉ dành cho người quản lý lịch */
+  const canOversee = can("duty.manage") || can("duty.manage-all");
   const periods = useQuery({ queryKey: DUTY_KEYS.periods, queryFn: () => dutyApi.periods(), enabled: can("duty.view") });
   const selected = useMemo(() => (periods.data ?? []).find((p) => p.id === selectedId) ?? periods.data?.[0] ?? null, [periods.data, selectedId]);
   const grid = useQuery({ queryKey: DUTY_KEYS.grid(selected?.id ?? 0), queryFn: () => dutyApi.grid(selected!.id), enabled: !!selected });
-  const summary = useQuery({ queryKey: DUTY_KEYS.summary(selected?.id ?? 0), queryFn: () => dutyApi.summary(selected!.id), enabled: !!selected && tab === "hours" });
-  const logs = useQuery({ queryKey: DUTY_KEYS.logs(selected?.id ?? 0), queryFn: () => dutyApi.logs(selected!.id), enabled: !!selected && tab === "logs" });
+  const summary = useQuery({ queryKey: DUTY_KEYS.summary(selected?.id ?? 0), queryFn: () => dutyApi.summary(selected!.id), enabled: !!selected && canOversee && tab === "hours" });
+  const logs = useQuery({ queryKey: DUTY_KEYS.logs(selected?.id ?? 0), queryFn: () => dutyApi.logs(selected!.id), enabled: !!selected && canOversee && tab === "logs" });
 
   const act = useMutation({
     mutationFn: async (fn: () => Promise<unknown>) => fn(),
@@ -423,7 +427,7 @@ export default function KyLichPage() {
     }
   };
 
-  if (!can("duty.view")) return <EmptyState title="Bạn chưa có quyền xem lịch trực" />;
+  if (!canOversee && !canManage) return <EmptyState title="Trang này dành cho người quản lý lịch trực" />;
   const g = grid.data;
 
   return (
@@ -535,9 +539,9 @@ export default function KyLichPage() {
                       <Download className="h-4 w-4" /> Excel
                     </Button>
                   ) : null}
-                  {canManage && selected.status === "NHAP" && (g?.slots.length ?? 0) === 0 ? (
-                    <Button size="sm" variant="ghost" className="text-rose-600" onClick={() => run(() => dutyApi.deletePeriod(selected.id), "Đã xoá kỳ lịch nháp", () => setSelectedId(null))}>
-                      <Trash2 className="h-4 w-4" /> Xoá
+                  {canManage ? (
+                    <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/40" onClick={() => setDeleteOpen(true)}>
+                      <Trash2 className="h-4 w-4" /> Xoá kỳ lịch
                     </Button>
                   ) : null}
                 </div>
@@ -568,8 +572,8 @@ export default function KyLichPage() {
                       />
                     ),
                   },
-                  { key: "hours", label: "Giờ trực", content: <HoursTab data={summary.data} loading={summary.isLoading} /> },
-                  { key: "logs", label: "Nhật ký", content: <LogsTab logs={logs.data} loading={logs.isLoading} canView={canManage} /> },
+                  ...(canOversee ? [{ key: "hours", label: "Giờ trực", content: <HoursTab data={summary.data} loading={summary.isLoading} /> },
+                  { key: "logs", label: "Nhật ký", content: <LogsTab logs={logs.data} loading={logs.isLoading} canView={canOversee} /> }] : []),
                 ]}
               />
             </CardBody>
@@ -582,6 +586,17 @@ export default function KyLichPage() {
       ) : null}
       {selected && generating ? <GenerateDialog open={generating} onClose={() => setGenerating(false)} periodId={selected.id} /> : null}
       {selected && addingSlot ? <SlotDialog open={addingSlot} onClose={() => setAddingSlot(false)} period={selected} /> : null}
+      {selected && deleteOpen ? (
+        <DeletePeriodDialog
+          period={selected}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => {
+            setDeleteOpen(false);
+            setSelectedId(null);
+            refresh();
+          }}
+        />
+      ) : null}
 
       {selected ? (
         <ConfirmDialog

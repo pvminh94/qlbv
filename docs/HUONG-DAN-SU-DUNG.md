@@ -259,13 +259,14 @@ Lịch trực lập theo **tuần** (Thứ 2 → Thứ 7), theo phòng khám × 
 
 ### 11.1 Điều phối lịch (KHTH, vai trò `DIEU_PHOI_TRUC`)
 
-1. **Kỳ lịch & công bố → Tạo kỳ lịch.** Đặt tên, từ ngày đến ngày, **mốc chốt lịch** (sau mốc này lịch tự khoá), thời điểm mở đăng ký tự nguyện (nếu cần) và các ràng buộc giờ trực.
+1. **Kỳ lịch & công bố → Tạo kỳ lịch.** Đặt tên, từ ngày đến ngày, **mốc chốt lịch** (sau mốc này lịch tự khoá), thời điểm mở đăng ký tự nguyện (nếu cần) và các ràng buộc giờ trực. Hai kỳ lịch không được trùng ngày; thời điểm mở đăng ký phải trước mốc chốt.
 2. **Sinh ô trực.** Chọn phòng, ca, vai trò và các thứ trong tuần. Ngày nghỉ lễ được bỏ qua tự động. Có thể thêm lẻ từng ô.
 3. **Xếp người.** Vào **Lịch trực tuần**, bấm vào ô → *Quản lý người trực*. Danh sách ứng viên có nhãn *Phù hợp / Có cảnh báo / Không đủ điều kiện*, kèm lý do cụ thể.
 4. **Công bố.** Hệ thống kiểm tra ô còn thiếu người. Sau khi công bố, mỗi người trực nhận thông báo.
 5. **Theo dõi** số ô còn thiếu trên các chỉ số đầu trang. Nhân viên có thể tự đăng ký ca trống trước mốc chốt.
 6. **Chốt.** Tự động theo mốc chốt, hoặc bấm *Chốt sớm*. Muốn mở lại: *Mở chốt* và ghi lý do.
 7. **Ngoại lệ sau chốt.** Yêu cầu ngoại lệ nằm ở **Yêu cầu đổi trực → Chờ tôi duyệt**; duyệt để gỡ người cũ và xếp người thay. Khi cần đổi gấp, dùng **Điều chỉnh trực tiếp** (bắt buộc ghi lý do; chỉ bỏ qua ràng buộc khi thật cần).
+8. **Xoá cả kỳ lịch** (*Kỳ lịch → Xoá kỳ lịch*). Phải ghi lý do (tối thiểu 5 ký tự) và gõ lại đúng tên kỳ. Không xoá được khi đã có ca trực đã diễn ra hoặc đang diễn ra, để giữ dữ liệu đối soát giờ trực. Nhân viên đã được xếp nhận thông báo huỷ ca; nhật ký vẫn được giữ.
 
 ### 11.2 Trưởng khoa (`TRUONG_KHOA`)
 
@@ -277,15 +278,15 @@ Lịch trực lập theo **tuần** (Thứ 2 → Thứ 7), theo phòng khám × 
 
 - **Lịch của tôi**: xem ca sắp tới; đăng ký ca trống khi kỳ đã công bố và chưa chốt; huỷ ca tự đăng ký trước giờ trực.
 - **Nhường / đổi ca**: chọn đồng nghiệp hoặc ca của đồng nghiệp; người kia đồng ý; sau đó chờ duyệt nếu cấu hình yêu cầu duyệt.
-- **Báo nghỉ / bận**: ca trong khoảng ngày đó sẽ không được xếp cho bạn; nếu đã có ca, Điều phối được báo.
+- **Báo nghỉ / bận**: ca trong khoảng ngày đó sẽ không được xếp cho bạn; nếu đã có ca, Điều phối được báo. Chỉ khai từ hôm nay trở đi, và không trùng khoảng đã khai.
 - **Báo sự cố / thay trực**: dùng khi không thể trực. Sau khi lịch đã chốt, đây là cách duy nhất để đổi người (gửi KHTH).
 
 ### 11.4 Danh mục (`ADMIN`, `DIEU_PHOI_TRUC`)
 
 - **Phòng khám**: mã, tên, khoa quản lý, vị trí. Phòng đã có ô trực thì tắt thay vì xoá.
-- **Ca trực**: mã, giờ bắt đầu và kết thúc (kết thúc trước giờ bắt đầu là ca qua đêm), đánh dấu ca đêm. Mặc định: S 07:00–12:00, C 12:00–17:00, CD 07:00–17:00; ca đêm D để tắt sẵn.
-- **Vai trò trực**: bác sĩ, điều dưỡng, kèm chức danh bắt buộc.
-- **Ngày nghỉ**: ngày không sinh ô trực khi tạo lịch.
+- **Ca trực**: mã, giờ bắt đầu và kết thúc (kết thúc trước giờ bắt đầu là ca qua đêm), đánh dấu ca đêm. Mặc định: S 07:00–12:00, C 12:00–17:00, CD 07:00–17:00; ca đêm D để tắt sẵn. Chọn màu bằng bảng màu có sẵn (bấm ô màu; cần màu khác thì bấm *Màu khác*). Không đổi giờ hay tính chất ca đêm khi ca đang được dùng: tắt ca cũ và tạo ca mới.
+- **Vai trò trực**: bác sĩ, điều dưỡng, kèm chức danh bắt buộc. Không đổi chức danh khi vai trò đang được dùng.
+- **Ngày nghỉ**: ngày không sinh ô trực khi tạo lịch. Không đánh dấu ngày nghỉ khi ngày đó đã có ô trực.
 
 > Mặc định hệ thống có 15 phòng "Phòng khám số 1…15" chưa gắn khoa. Hãy đổi tên và gắn khoa quản lý trước khi dùng thật.
 
@@ -299,7 +300,10 @@ Lịch trực lập theo **tuần** (Thứ 2 → Thứ 7), theo phòng khám × 
 | Sai chức danh; đang nghỉ phép; ô đã đủ người; ca đã qua; kỳ đã chốt | Chặn |
 | Khác khoa với phòng | Cảnh báo (có thể cấu hình thành chặn) |
 | Ca sáng và ca chiều liền nhau trong cùng ngày | Được phép |
+| Hai kỳ lịch trùng ngày | Chặn |
+| Mở đăng ký sau mốc chốt; đánh dấu ngày nghỉ khi đã có ô trực; đổi giờ hoặc ca đêm của ca đang dùng; đổi chức danh của vai trò đang dùng | Chặn |
+| Nghỉ phép trùng khoảng đã khai; nhân viên khai nghỉ cho ngày đã qua | Chặn |
 
 ### 11.6 Nhật ký và báo cáo
 
-Mọi thao tác quan trọng được ghi vào **Kỳ lịch → Nhật ký**, kèm người thực hiện và lý do. Tab **Giờ trực** cho thấy số ca, ca đêm, số ngày trực, tổng giờ theo người và độ chênh lệch giữa người nhiều nhất và ít nhất để điều chỉnh cho công bằng.
+Mọi thao tác quan trọng được ghi vào **Kỳ lịch → Nhật ký**, kèm người thực hiện và lý do. Tab **Giờ trực** cho thấy số ca, ca đêm, số ngày trực, tổng giờ theo người và độ chênh lệch giữa người nhiều nhất và ít nhất để điều chỉnh cho công bằng. Tab **Giờ trực** và **Nhật ký** chỉ người quản lý lịch thấy. Khi xoá kỳ lịch, nhật ký vẫn được giữ, ghi rõ tên kỳ, người xoá và lý do.

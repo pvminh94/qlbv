@@ -174,9 +174,9 @@ Chín quyền và hai vai trò mới (tạo bởi migration `0015_lich_truc.sql`
 |---|---|---|
 | `duty.view` | Xem lịch trực đã công bố, danh mục, lưới lịch | Mọi vai trò trực, `LANH_DAO`, `ADMIN` |
 | `duty.register` | Tự đăng ký ca trống, nhường/đổi ca, báo nghỉ, báo sự cố của chính mình | `NHAN_VIEN_TRUC`, `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
-| `duty.manage` | Sinh ô, xếp và gỡ người trực **trong khoa được giao** | `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
+| `duty.manage` | Sinh ô, xếp và gỡ người trực **trong khoa được giao**; xem tổng hợp giờ trực và nhật ký | `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
 | `duty.manage-all` | Xếp trực mọi phòng khám; bỏ qua ràng buộc khi có lý do | `KHTB`, `DIEU_PHOI_TRUC` |
-| `duty.period.manage` | Tạo, cấu hình, công bố, chốt sớm, mở chốt kỳ lịch | `KHTB`, `DIEU_PHOI_TRUC` |
+| `duty.period.manage` | Tạo, cấu hình, công bố, chốt sớm, mở chốt và xoá cả kỳ lịch | `KHTB`, `DIEU_PHOI_TRUC` |
 | `duty.catalog.manage` | Danh mục phòng khám, ca trực, vai trò trực, ngày nghỉ | `ADMIN`, `DIEU_PHOI_TRUC` |
 | `duty.swap.approve` | Duyệt đổi/nhường ca trước khi chốt (**trong khoa**) | `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
 | `duty.exception.resolve` | Duyệt ngoại lệ sau khi chốt; điều chỉnh người trực trực tiếp (**tài khoản đổi trực của KHTH**) | `KHTB`, `DIEU_PHOI_TRUC` |
@@ -185,7 +185,7 @@ Chín quyền và hai vai trò mới (tạo bởi migration `0015_lich_truc.sql`
 **Hai vai trò mới**
 
 - `DIEU_PHOI_TRUC` — *Điều phối lịch trực (KHTH)*. Phạm vi toàn viện, 9 quyền. Đây là **tài khoản đổi trực** để xử lý ngoại lệ và điều chỉnh khẩn.
-- `NHAN_VIEN_TRUC` — *Nhân viên trực khám*. Phạm vi cá nhân, 2 quyền (`duty.view`, `duty.register`). Gán cho bác sĩ, điều dưỡng tham gia trực.
+- `NHAN_VIEN_TRUC` — *Nhân viên trực khám*. Phạm vi cá nhân, 2 quyền (`duty.view`, `duty.register`). Gán cho bác sĩ, điều dưỡng tham gia trực. Chỉ thấy lịch chung và thao tác trên ca của mình; không xem tổng hợp giờ trực, nhật ký, trang Kỳ lịch và trang Danh mục.
 
 **Quy tắc phạm vi**
 

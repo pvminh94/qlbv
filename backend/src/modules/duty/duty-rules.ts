@@ -324,3 +324,8 @@ export function evaluateCandidate(i: EvaluateInput): EvaluateResult {
 export function violationText(res: EvaluateResult): string {
   return res.errors.map((e) => e.message).join('; ');
 }
+
+/** Hai khoảng ngày YYYY-MM-DD (hai đầu bao gồm) có giao nhau không */
+export function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}

@@ -352,13 +352,14 @@ Tiền tố `/api/duty`. Ngày dạng `YYYY-MM-DD`; thời điểm dạng ISO 86
 | `POST` · `PUT` · `DELETE` | `/duty/rooms[/:id]` (tương tự `shifts`, `roles`, `closed-days`) | Thêm / sửa / xoá danh mục. Xoá bị chặn khi đang được dùng trong ô trực (hãy tắt thay vì xoá) | `duty.catalog.manage` |
 | `GET` | `/duty/periods` | Kỳ lịch, kèm `phase` (`NHAP` · `MO` · `CHOT`) và số ô, số người. Bản nháp chỉ người quản lý thấy | `duty.view` |
 | `POST` | `/duty/periods` | Tạo kỳ lịch: `name, startDate, endDate, lockAt, registrationOpensAt?, rules?, note?` | `duty.period.manage` |
-| `GET` · `PUT` · `DELETE` | `/duty/periods/:id` | Xem · sửa (kỳ đã chốt chỉ sửa tên và ghi chú) · xoá (chỉ kỳ nháp rỗng) | `duty.view` · `duty.period.manage` |
+| `GET` · `PUT` | `/duty/periods/:id` | Xem · sửa (kỳ đã chốt chỉ sửa tên và ghi chú; đổi ngày chỉ khi là kỳ nháp và không trùng kỳ khác) | `duty.view` · `duty.period.manage` |
+| `POST` | `/duty/periods/:id/delete` | Xoá cả kỳ lịch `{reason (≥5 ký tự), confirmName (gõ lại đúng tên kỳ)}`. Chặn nếu đã có ca đã diễn ra hoặc đang diễn ra. Xoá kèm ô, phân công và yêu cầu đang chờ; báo nhân viên đã được xếp (kỳ đã công bố); nhật ký được giữ | `duty.period.manage` |
 | `POST` | `/duty/periods/:id/publish` | Công bố `{force?}`: kiểm tra ô còn thiếu người, thông báo từng người được xếp | `duty.period.manage` |
 | `POST` | `/duty/periods/:id/lock` | Chốt sớm (trước mốc chốt) | `duty.period.manage` |
 | `POST` | `/duty/periods/:id/unlock` | Mở chốt `{reason, lockAt}` — lý do tối thiểu 5 ký tự, mốc mới phải ở tương lai | `duty.period.manage` |
 | `GET` | `/duty/periods/:id/grid` | Lưới: phòng, ca, vai trò, ngày (kèm ngày nghỉ), ô kèm người trực, nghỉ phép (chỉ quản lý), `viewer` (quyền của người xem) | `duty.view` |
 | `GET` | `/duty/periods/:id/my-options` | Các ca tôi có thể đăng ký, kèm lý do nếu không được | `duty.register` |
-| `GET` | `/duty/periods/:id/summary` | Giờ trực, số ca, ca đêm, số ngày trực theo người; chênh lệch giờ giữa người nhiều nhất và ít nhất | `duty.view` |
+| `GET` | `/duty/periods/:id/summary` | Giờ trực, số ca, ca đêm, số ngày trực theo người; chênh lệch giờ giữa người nhiều nhất và ít nhất | `duty.manage` · `duty.manage-all` |
 | `GET` | `/duty/periods/:id/logs` | Nhật ký thay đổi (kèm lý do, người thực hiện) | `duty.view` (chỉ người quản lý) |
 | `GET` | `/duty/periods/:id/export` | Xuất Excel: sheet lưới lịch và sheet tổng hợp giờ | `duty.export` |
 | `POST` | `/duty/periods/:id/slots/generate` | Sinh ô hàng loạt `{roomIds, shiftIds, roleIds, weekdays: [1..7], requiredCount?, skipClosedDays?}`, tối đa 4000 ô | `duty.manage` · `duty.manage-all` |

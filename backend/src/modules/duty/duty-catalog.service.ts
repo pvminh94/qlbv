@@ -11,7 +11,7 @@ import {
   dutySlots,
   jobTitles,
 } from '../../db/schema';
-import { isNightWindow } from './duty-rules';
+import { fmtDm, isNightWindow } from './duty-rules';
 import type {
   CatalogQueryDto,
   ClosedDayDto,
@@ -190,7 +190,7 @@ export class DutyCatalogService {
         endTime: dto.endTime,
         crossesMidnight: t.crossesMidnight,
         isNight: dto.isNight ?? t.isNightDefault,
-        color: dto.color ?? '#2563eb',
+        color: dto.color ?? '#0F766E',
         sortOrder: dto.sortOrder ?? 0,
         active: dto.active ?? true,
         note: dto.note ?? '',
@@ -203,6 +203,18 @@ export class DutyCatalogService {
     const [cur] = await this.db.db.select().from(dutyShiftTypes).where(eq(dutyShiftTypes.id, id)).limit(1);
     if (!cur) throw new NotFoundException('Không tìm thấy ca trực');
     if (dto.code !== undefined) await this.assertUniqueCode('shifts', dto.code, id);
+    const timeChanged =
+      (dto.startTime !== undefined && dto.startTime !== cur.startTime) ||
+      (dto.endTime !== undefined && dto.endTime !== cur.endTime) ||
+      (dto.isNight !== undefined && dto.isNight !== cur.isNight);
+    if (timeChanged) {
+      const [{ n }] = await this.db.db.select({ n: sql<number>`count(*)::int` }).from(dutySlots).where(eq(dutySlots.shiftId, id));
+      if (n > 0) {
+        throw new ConflictException(
+          `Ca đã được dùng trong ${n} ô trực — không đổi giờ hay tính chất ca đêm để giữ đúng số giờ đã ghi nhận. Hãy tắt ca này và tạo ca mới.`,
+        );
+      }
+    }
     const start = dto.startTime ?? cur.startTime;
     const end = dto.endTime ?? cur.endTime;
     const t = this.shiftTimes(start, end);
@@ -289,6 +301,14 @@ export class DutyCatalogService {
     if (!cur) throw new NotFoundException('Không tìm thấy vai trò trực');
     if (dto.code !== undefined) await this.assertUniqueCode('roles', dto.code, id);
     await this.assertTitle(dto.requiredTitle);
+    if (dto.requiredTitle !== undefined && dto.requiredTitle !== cur.requiredTitle) {
+      const [{ n }] = await this.db.db.select({ n: sql<number>`count(*)::int` }).from(dutySlots).where(eq(dutySlots.roleId, id));
+      if (n > 0) {
+        throw new ConflictException(
+          `Vai trò đã dùng trong ${n} ô trực — không đổi chức danh yêu cầu để không làm sai các phân công hiện có. Hãy tạo vai trò mới.`,
+        );
+      }
+    }
     const patch: Partial<typeof dutyRoles.$inferInsert> = { updatedAt: new Date() };
     if (dto.code !== undefined) patch.code = dto.code;
     if (dto.name !== undefined) patch.name = dto.name;
@@ -329,8 +349,15 @@ export class DutyCatalogService {
     if (d && d.id !== exceptId) throw new ConflictException(`Ngày ${date} đã có trong danh mục ngày nghỉ`);
   }
 
+  /** Ngày đã có ô trực thì không được đánh dấu là ngày nghỉ (tránh lịch mâu thuẫn) */
+  private async assertNoSlotsOn(date: string) {
+    const [{ n }] = await this.db.db.select({ n: sql<number>`count(*)::int` }).from(dutySlots).where(eq(dutySlots.dutyDate, date));
+    if (n > 0) throw new ConflictException(`Ngày ${fmtDm(date)} đã có ${n} ô trực — hãy xoá các ô đó trước khi đánh dấu ngày nghỉ`);
+  }
+
   async createClosedDay(dto: ClosedDayDto) {
     await this.assertDate(dto.date);
+    await this.assertNoSlotsOn(dto.date);
     const [row] = await this.db.db.insert(dutyClosedDays).values({ date: dto.date, name: dto.name, note: dto.note ?? '' }).returning();
     return row;
   }
@@ -338,7 +365,10 @@ export class DutyCatalogService {
   async updateClosedDay(id: number, dto: UpdateClosedDayDto) {
     const [cur] = await this.db.db.select().from(dutyClosedDays).where(eq(dutyClosedDays.id, id)).limit(1);
     if (!cur) throw new NotFoundException('Không tìm thấy ngày nghỉ');
-    if (dto.date !== undefined) await this.assertDate(dto.date, id);
+    if (dto.date !== undefined) {
+      await this.assertDate(dto.date, id);
+      await this.assertNoSlotsOn(dto.date);
+    }
     const [row] = await this.db.db
       .update(dutyClosedDays)
       .set({ ...(dto.date !== undefined ? { date: dto.date } : {}), ...(dto.name !== undefined ? { name: dto.name } : {}), ...(dto.note !== undefined ? { note: dto.note } : {}) })

@@ -11,6 +11,7 @@ import { Input, Label, Select, Switch, Textarea } from '@/components/ui/input';
 import { TableWrap, Td, Th, Tr } from '@/components/ui/table';
 import { apiFetch } from '@/lib/api';
 import { AdvancedFilter } from '@/components/shared/advanced-filter';
+import { ColorPicker } from '@/components/shared/color-picker';
 import { cn } from '@/lib/utils';
 import type { Paginated } from '@/types/api';
 
@@ -22,8 +23,10 @@ export interface CrudOption {
 export interface CrudField {
   name: string;
   label: string;
-  type?: 'text' | 'number' | 'password' | 'textarea' | 'select' | 'switch' | 'date' | 'time' | 'datetime' | 'email' | 'tags';
+  type?: 'text' | 'number' | 'password' | 'textarea' | 'select' | 'switch' | 'date' | 'time' | 'datetime' | 'email' | 'tags' | 'color';
   options?: CrudOption[];
+  /** Bảng màu cho kiểu 'color' (chọn bằng ô màu, không cần gõ mã) */
+  palette?: { value: string; label: string }[];
   required?: boolean;
   placeholder?: string;
   help?: string;
@@ -471,6 +474,13 @@ export function CrudTable({
                       </option>
                     ))}
                   </Select>
+                ) : f.type === 'color' ? (
+                  <ColorPicker
+                    id={`f-${f.name}`}
+                    value={String(form[f.name] ?? '')}
+                    palette={f.palette ?? []}
+                    onChange={(hex) => setForm((s) => ({ ...s, [f.name]: hex }))}
+                  />
                 ) : f.type === 'tags' ? (
                   <Input
                     id={`f-${f.name}`}

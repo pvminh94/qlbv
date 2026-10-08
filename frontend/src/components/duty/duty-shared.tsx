@@ -30,7 +30,7 @@ export function ShiftChip({ code, color, className = "" }: { code: string; color
   return (
     <span
       className={`inline-flex min-w-[2.25rem] items-center justify-center rounded-md px-1.5 py-0.5 text-[11px] font-bold leading-none text-white ${className}`}
-      style={{ background: color || "#2563eb" }}
+      style={{ background: color || "#0F766E" }}
     >
       {code}
     </span>
@@ -59,7 +59,7 @@ export function PhaseBanner({ period, canManage }: { period: DutyPeriod; canMana
         }
       : period.phase === "MO"
         ? {
-            cls: "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100",
+            cls: "border-teal-200 bg-teal-50 text-teal-900 dark:border-teal-900 dark:bg-teal-950/40 dark:text-teal-100",
             icon: <Send className="mt-0.5 h-4.5 w-4.5 shrink-0" />,
             title: "Đã công bố — còn có thể điều chỉnh",
             text: `Chốt lịch lúc ${fmtDateTime(period.lockAt)}. Sau mốc này, đổi trực phải qua yêu cầu ngoại lệ gửi KHTH.`,
@@ -150,7 +150,7 @@ export function KpiTile({ label, value, hint, tone = "default" }: { label: strin
     success: "text-emerald-600 dark:text-emerald-400",
     warning: "text-amber-600 dark:text-amber-400",
     danger: "text-rose-600 dark:text-rose-400",
-    info: "text-sky-600 dark:text-sky-400",
+    info: "text-teal-600 dark:text-teal-400",
   };
   return (
     <div className="rounded-xl border bg-[var(--card)] p-3.5 shadow-sm">

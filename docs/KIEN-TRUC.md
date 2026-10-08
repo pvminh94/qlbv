@@ -238,7 +238,7 @@ docker-compose.yml # PostgreSQL + Redis + API + Web
 - Ca sáng và ca chiều liền nhau trong cùng ngày được phép, theo mẫu lịch thật của phòng khám. Ca đêm (có từ 2 giờ trở lên trong khung 22:00–06:00, BLLĐ Điều 106) luôn cần khoảng nghỉ.
 - Cấu hình ràng buộc lưu theo từng kỳ (`duty_periods.rules`, JSON), chuẩn hoá bởi `normalizeRules` (thiếu thì lấy mặc định, vượt biên thì kẹp về biên).
 
-**Đồng thời và toàn vẹn dữ liệu.** Mọi thao tác ghi phân công chạy trong transaction, khoá ô bằng `SELECT … FOR UPDATE`, rồi khoá từng người bằng `pg_advisory_xact_lock(9301, userId)`, luôn theo thứ tự id tăng dần để tránh deadlock. Ràng buộc duy nhất ở CSDL: `(slot_id, user_id)` và `(period_id, duty_date, room_id, shift_id, role_id)`. Luôn truyền `tx` vào các hàm bên trong transaction.
+**Đồng thời và toàn vẹn dữ liệu.** Mọi thao tác ghi phân công chạy trong transaction, khoá ô bằng `SELECT … FOR UPDATE`, rồi khoá từng người bằng `pg_advisory_xact_lock(9301, userId)`, luôn theo thứ tự id tăng dần để tránh deadlock. Ràng buộc duy nhất ở CSDL: `(slot_id, user_id)` và `(period_id, duty_date, room_id, shift_id, role_id)`. Luôn truyền `tx` vào các hàm bên trong transaction. Khoá tạo/đổi khoảng ngày kỳ lịch: `pg_advisory_xact_lock(9300)` (chặn hai kỳ trùng ngày).
 
 **Chốt lịch.** Trạng thái lưu là `NHAP` · `CONG_BO` · `DA_CHOT`. Trạng thái hiệu lực (`phase`) tính theo `lock_at`, nên đến mốc chốt kỳ tự khoá mà không cần tác vụ định kỳ. Mở chốt bắt buộc lý do và mốc mới ở tương lai.
 

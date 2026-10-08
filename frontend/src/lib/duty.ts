@@ -312,7 +312,8 @@ export const dutyApi = {
   period: (id: number) => get<DutyPeriod>(`/duty/periods/${id}`),
   createPeriod: (body: Json) => post<DutyPeriod>('/duty/periods', body),
   updatePeriod: (id: number, body: Json) => put<DutyPeriod>(`/duty/periods/${id}`, body),
-  deletePeriod: (id: number) => del<{ ok: boolean }>(`/duty/periods/${id}`),
+  deletePeriod: (id: number, body: { reason: string; confirmName: string }) =>
+    post<{ ok: boolean; notified: number }>(`/duty/periods/${id}/delete`, body),
   publish: (id: number, force = false) => post<{ ok: boolean; missing: number; notified: number }>(`/duty/periods/${id}/publish`, { force }),
   lock: (id: number) => post<{ ok: boolean }>(`/duty/periods/${id}/lock`),
   unlock: (id: number, reason: string, lockAt: string) => post<{ ok: boolean }>(`/duty/periods/${id}/unlock`, { reason, lockAt }),
@@ -370,3 +371,19 @@ export const DUTY_KEYS = {
   requests: ['duty-requests'] as const,
   rooms: ['duty-rooms'] as const,
 };
+
+/** Bảng màu cho ca trực: dịu mắt, tươi mát, đủ tương phản với chữ trắng trên ô lịch */
+export const SHIFT_PALETTE: { value: string; label: string }[] = [
+  { value: '#0F766E', label: 'Ngọc lam' },
+  { value: '#0E7490', label: 'Xanh cổ vịt' },
+  { value: '#0369A1', label: 'Xanh biển' },
+  { value: '#1D4ED8', label: 'Xanh dương' },
+  { value: '#4338CA', label: 'Chàm' },
+  { value: '#6D28D9', label: 'Oải hương' },
+  { value: '#BE185D', label: 'Hồng mận' },
+  { value: '#BE123C', label: 'Đỏ san hô' },
+  { value: '#C2410C', label: 'Cam đất' },
+  { value: '#B45309', label: 'Hổ phách' },
+  { value: '#15803D', label: 'Xanh lá' },
+  { value: '#475569', label: 'Xám đá' },
+];

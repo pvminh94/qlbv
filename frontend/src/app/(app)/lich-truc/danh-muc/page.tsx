@@ -8,6 +8,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { SHIFT_PALETTE } from "@/lib/duty";
 
 type Opt = { id?: number; value?: number | string; name?: string; label?: string };
 const toOptions = (list: unknown) =>
@@ -58,7 +59,7 @@ export default function DanhMucTrucPage() {
     { name: "startTime", label: "Giờ bắt đầu", type: "time", required: true },
     { name: "endTime", label: "Giờ kết thúc", type: "time", required: true, help: "Kết thúc trước giờ bắt đầu = ca qua đêm" },
     { name: "isNight", label: "Ca đêm", type: "switch", defaultValue: false, hideInTable: true, help: "Ca đêm có giới hạn riêng và cần khoảng nghỉ liền kề" },
-    { name: "color", label: "Màu hiển thị", placeholder: "#2563eb", hideInTable: true, help: "Mã màu dạng #RRGGBB" },
+    { name: "color", label: "Màu hiển thị", type: "color", palette: SHIFT_PALETTE, defaultValue: SHIFT_PALETTE[0].value, hideInTable: true, help: 'Chọn từ bảng màu; cần màu khác thì bấm "Màu khác"' },
     { name: "sortOrder", label: "Thứ tự", type: "number", hideInTable: true },
     { name: "active", label: "Đang sử dụng", type: "switch", defaultValue: true },
     { name: "note", label: "Ghi chú", type: "textarea", hideInTable: true },
@@ -85,7 +86,7 @@ export default function DanhMucTrucPage() {
     { name: "note", label: "Ghi chú", type: "textarea", hideInTable: true },
   ];
 
-  if (!can("duty.view")) return <EmptyState title="Bạn chưa có quyền xem danh mục trực" />;
+  if (!can("duty.catalog.manage")) return <EmptyState title="Trang này dành cho người quản trị danh mục trực" />;
 
   return (
     <>

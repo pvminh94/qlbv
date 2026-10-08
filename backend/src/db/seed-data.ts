@@ -963,10 +963,10 @@ export const DEFAULT_DUTY_SHIFTS: {
   sortOrder: number;
   active: boolean;
 }[] = [
-  { code: 'S', name: 'Ca sáng', startTime: '07:00', endTime: '12:00', isNight: false, color: '#f59e0b', sortOrder: 1, active: true },
-  { code: 'C', name: 'Ca chiều', startTime: '12:00', endTime: '17:00', isNight: false, color: '#2563eb', sortOrder: 2, active: true },
-  { code: 'CD', name: 'Cả ngày', startTime: '07:00', endTime: '17:00', isNight: false, color: '#7c3aed', sortOrder: 3, active: true },
-  { code: 'D', name: 'Ca đêm', startTime: '17:00', endTime: '07:00', isNight: true, color: '#0f172a', sortOrder: 4, active: false },
+  { code: 'S', name: 'Ca sáng', startTime: '07:00', endTime: '12:00', isNight: false, color: '#0F766E', sortOrder: 1, active: true },
+  { code: 'C', name: 'Ca chiều', startTime: '12:00', endTime: '17:00', isNight: false, color: '#0369A1', sortOrder: 2, active: true },
+  { code: 'CD', name: 'Cả ngày', startTime: '07:00', endTime: '17:00', isNight: false, color: '#15803D', sortOrder: 3, active: true },
+  { code: 'D', name: 'Ca đêm', startTime: '17:00', endTime: '07:00', isNight: true, color: '#4338CA', sortOrder: 4, active: false },
 ];
 
 export const DEFAULT_DUTY_ROLES: { code: string; name: string; requiredTitle: string; sortOrder: number }[] = [

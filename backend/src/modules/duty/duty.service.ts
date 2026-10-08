@@ -1,13 +1,14 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import * as ExcelJS from 'exceljs';
-import { DbService, type Executor } from '../../db/db.service';
+import { DbService, type Executor, type Tx } from '../../db/db.service';
 import {
   dutyAbsences,
   dutyAssignments,
   dutyClosedDays,
   dutyLogs,
   dutyPeriods,
+  dutyRequests,
   dutyRoles,
   dutyRooms,
   dutyShiftTypes,
@@ -35,6 +36,7 @@ import type {
   AbsenceDto,
   AbsenceQueryDto,
   AssignDto,
+  DeletePeriodDto,
   ForceDto,
   GenerateSlotsDto,
   PeriodDto,
@@ -62,6 +64,16 @@ function parseInstant(value: string, label: string): Date {
 function assertRange(start: string, end: string) {
   if (start > end) throw new BadRequestException('Ngày bắt đầu phải trước hoặc trùng ngày kết thúc');
   if (dateRange(start, end).length > 62) throw new BadRequestException('Kỳ lịch tối đa 62 ngày (nên lập theo tuần hoặc theo tháng)');
+}
+
+/** Khoá tư vấn: tuần tự hoá việc tạo/đổi khoảng ngày kỳ lịch để hai kỳ không lọt trùng ngày */
+const lockPeriodCalendar = (tx: Tx) => tx.execute(sql`select pg_advisory_xact_lock(9300)`);
+
+/** Mở đăng ký phải diễn ra trước mốc chốt lịch */
+function assertWindow(opens: Date | null, lockAt: Date) {
+  if (opens && opens.getTime() >= lockAt.getTime()) {
+    throw new BadRequestException('Mốc mở đăng ký phải trước mốc chốt lịch');
+  }
 }
 
 @Injectable()
@@ -123,30 +135,52 @@ export class DutyService {
     return { ...p, ...this.core.phaseOf(p) };
   }
 
+  /** Mỗi ngày chỉ thuộc một kỳ lịch: chặn khoảng ngày giao với kỳ đã có (trừ chính kỳ đang sửa) */
+  private async assertNoPeriodOverlap(c: Executor, start: string, end: string, exceptId?: number) {
+    const conds: SQL[] = [lte(dutyPeriods.startDate, end), gte(dutyPeriods.endDate, start)];
+    if (exceptId) conds.push(ne(dutyPeriods.id, exceptId));
+    const [hit] = await c
+      .select({ name: dutyPeriods.name, startDate: dutyPeriods.startDate, endDate: dutyPeriods.endDate })
+      .from(dutyPeriods)
+      .where(and(...conds))
+      .limit(1);
+    if (hit) {
+      throw new ConflictException(
+        `Khoảng ngày trùng với kỳ lịch "${hit.name}" (${fmtDm(hit.startDate)} – ${fmtDm(hit.endDate)}). Mỗi ngày chỉ thuộc một kỳ lịch.`,
+      );
+    }
+  }
+
   async createPeriod(user: AccessContext, dto: PeriodDto) {
     assertRange(dto.startDate, dto.endDate);
     const lockAt = parseInstant(dto.lockAt, 'Thời điểm chốt lịch');
     const opens = dto.registrationOpensAt ? parseInstant(dto.registrationOpensAt, 'Thời điểm mở đăng ký') : null;
-    const [row] = await this.db.db
-      .insert(dutyPeriods)
-      .values({
-        name: dto.name,
-        startDate: dto.startDate,
-        endDate: dto.endDate,
-        lockAt,
-        registrationOpensAt: opens,
-        rules: normalizeRules(dto.rules),
-        note: dto.note ?? '',
-        status: 'NHAP',
-        createdBy: user.id,
-        updatedBy: user.id,
-      })
-      .returning();
-    await this.core.log(this.db.db, {
-      periodId: row.id,
-      action: 'PERIOD_CREATE',
-      actorId: user.id,
-      detail: { name: row.name, startDate: row.startDate, endDate: row.endDate, lockAt: row.lockAt },
+    assertWindow(opens, lockAt);
+    const row = await this.db.transaction(async (tx) => {
+      await lockPeriodCalendar(tx);
+      await this.assertNoPeriodOverlap(tx, dto.startDate, dto.endDate);
+      const [created] = await tx
+        .insert(dutyPeriods)
+        .values({
+          name: dto.name,
+          startDate: dto.startDate,
+          endDate: dto.endDate,
+          lockAt,
+          registrationOpensAt: opens,
+          rules: normalizeRules(dto.rules),
+          note: dto.note ?? '',
+          status: 'NHAP',
+          createdBy: user.id,
+          updatedBy: user.id,
+        })
+        .returning();
+      await this.core.log(tx, {
+        periodId: created.id,
+        action: 'PERIOD_CREATE',
+        actorId: user.id,
+        detail: { name: created.name, startDate: created.startDate, endDate: created.endDate, lockAt: created.lockAt },
+      });
+      return created;
     });
     this.core.emit('period', row.id);
     return row;
@@ -171,35 +205,123 @@ export class DutyService {
         .where(and(eq(dutySlots.periodId, id), or(lte(dutySlots.dutyDate, addDays(startDate, -1)), gte(dutySlots.dutyDate, addDays(endDate, 1)))));
       if (n > 0) throw new ConflictException(`Còn ${n} ô trực nằm ngoài khoảng ngày mới — xoá các ô đó trước`);
     }
+    const lockAt = dto.lockAt !== undefined ? parseInstant(dto.lockAt, 'Thời điểm chốt lịch') : p.lockAt;
+    const opens =
+      dto.registrationOpensAt !== undefined
+        ? dto.registrationOpensAt
+          ? parseInstant(dto.registrationOpensAt, 'Thời điểm mở đăng ký')
+          : null
+        : p.registrationOpensAt;
+    if (dto.lockAt !== undefined || dto.registrationOpensAt !== undefined) assertWindow(opens, lockAt);
     const patch: Partial<typeof dutyPeriods.$inferInsert> = { updatedAt: new Date(), updatedBy: user.id };
     if (dto.name !== undefined) patch.name = dto.name;
     if (dto.note !== undefined) patch.note = dto.note;
     if (dto.startDate !== undefined) patch.startDate = dto.startDate;
     if (dto.endDate !== undefined) patch.endDate = dto.endDate;
-    if (dto.lockAt !== undefined) patch.lockAt = parseInstant(dto.lockAt, 'Thời điểm chốt lịch');
-    if (dto.registrationOpensAt !== undefined) {
-      patch.registrationOpensAt = dto.registrationOpensAt ? parseInstant(dto.registrationOpensAt, 'Thời điểm mở đăng ký') : null;
-    }
+    if (dto.lockAt !== undefined) patch.lockAt = lockAt;
+    if (dto.registrationOpensAt !== undefined) patch.registrationOpensAt = opens;
     if (dto.rules !== undefined) patch.rules = normalizeRules({ ...p.rules, ...dto.rules });
-    const [row] = await this.db.db.update(dutyPeriods).set(patch).where(eq(dutyPeriods.id, id)).returning();
     const changed = Object.keys(patch).filter((k) => !['updatedAt', 'updatedBy'].includes(k));
-    await this.core.log(this.db.db, { periodId: id, action: 'PERIOD_UPDATE', actorId: user.id, detail: { changed } });
+    const apply = async (c: Executor) => {
+      if (datesChanged) await this.assertNoPeriodOverlap(c, startDate, endDate, id);
+      const [row] = await c.update(dutyPeriods).set(patch).where(eq(dutyPeriods.id, id)).returning();
+      await this.core.log(c, { periodId: id, action: 'PERIOD_UPDATE', actorId: user.id, detail: { changed } });
+      return row;
+    };
+    const row = datesChanged
+      ? await this.db.transaction(async (tx) => {
+          await lockPeriodCalendar(tx);
+          return apply(tx);
+        })
+      : await apply(this.db.db);
     this.core.emit('period', id);
     return { ...row, ...this.core.phaseOf(row) };
   }
 
-  async deletePeriod(user: AccessContext, id: number) {
+  /**
+   * Xoá cả kỳ lịch. Chặn khi đã có ca trực đã diễn ra hoặc đang diễn ra (giữ dữ liệu đối soát giờ).
+   * Bắt buộc lý do và gõ lại đúng tên kỳ. Nhật ký được giữ (mã kỳ về NULL, nội dung nằm trong detail).
+   * Sau khi xoá thành công: nhân viên đã được xếp và người đang có yêu cầu nhường/đổi được thông báo.
+   */
+  async deletePeriod(user: AccessContext, id: number, dto: DeletePeriodDto) {
     const p = await this.core.getPeriod(id);
-    if (p.status !== 'NHAP') throw new ConflictException('Chỉ xoá được kỳ lịch đang ở trạng thái nháp');
-    const [{ n }] = await this.db.db
-      .select({ n: sql<number>`count(*)::int` })
+    if (dto.confirmName.trim() !== p.name.trim()) throw new BadRequestException('Tên xác nhận chưa khớp với tên kỳ lịch');
+    const today = bangkokToday();
+    const duties = await this.db.db
+      .select({ userId: dutyAssignments.userId, fullName: users.fullName, dutyDate: dutySlots.dutyDate })
       .from(dutyAssignments)
       .innerJoin(dutySlots, eq(dutySlots.id, dutyAssignments.slotId))
+      .innerJoin(users, eq(users.id, dutyAssignments.userId))
       .where(eq(dutySlots.periodId, id));
-    if (n > 0) throw new ConflictException(`Kỳ lịch đã có ${n} phân công — không thể xoá`);
-    await this.db.db.delete(dutyPeriods).where(eq(dutyPeriods.id, id));
+    const past = duties.filter((d) => d.dutyDate <= today).length;
+    if (past > 0) {
+      throw new ConflictException(
+        `Kỳ lịch đã có ${past} ca trực đã diễn ra hoặc đang diễn ra — không xoá để giữ dữ liệu đối soát giờ trực. Hãy sửa từng ô thay vì xoá cả kỳ.`,
+      );
+    }
+    const [{ slotCount }] = await this.db.db
+      .select({ slotCount: sql<number>`count(*)::int` })
+      .from(dutySlots)
+      .where(eq(dutySlots.periodId, id));
+    const openRequests = await this.db.db
+      .select({ requesterId: dutyRequests.requesterId, targetUserId: dutyRequests.targetUserId })
+      .from(dutyRequests)
+      .where(and(eq(dutyRequests.periodId, id), or(eq(dutyRequests.status, 'CHO_NGUOI_NHAN'), eq(dutyRequests.status, 'CHO_DUYET'))));
+    const perUser = new Map<number, { fullName: string; n: number }>();
+    for (const d of duties) {
+      const cur = perUser.get(d.userId) ?? { fullName: d.fullName, n: 0 };
+      cur.n += 1;
+      perUser.set(d.userId, cur);
+    }
+    const reason = dto.reason.trim();
+    await this.db.transaction(async (tx) => {
+      await this.core.log(tx, {
+        periodId: id,
+        action: 'PERIOD_DELETE',
+        actorId: user.id,
+        reason,
+        detail: {
+          name: p.name,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          status: p.status,
+          slots: slotCount,
+          assignments: duties.length,
+          people: [...perUser.values()].map((x) => x.fullName),
+          openRequests: openRequests.length,
+        },
+      });
+      await tx.delete(dutyPeriods).where(eq(dutyPeriods.id, id));
+    });
+    if (p.status !== 'NHAP') {
+      for (const [userId, { n }] of perUser) {
+        this.core.notifyAfterCommit([userId], {
+          title: 'Kỳ lịch trực đã bị huỷ',
+          body: `${p.name} (${fmtDm(p.startDate)} – ${fmtDm(p.endDate)}) đã bị xoá: bạn mất ${n} ca trực. Lý do: ${reason}`,
+          level: 'WARNING',
+          link: '/lich-truc/cua-toi',
+          module: 'DUTY',
+          entityId: String(id),
+        });
+      }
+      const others = [
+        ...new Set(
+          openRequests
+            .flatMap((r) => [r.requesterId, r.targetUserId])
+            .filter((x): x is number => typeof x === 'number' && !perUser.has(x)),
+        ),
+      ];
+      this.core.notifyAfterCommit(others, {
+        title: 'Yêu cầu đổi trực đã bị huỷ',
+        body: `${p.name} đã bị xoá nên các yêu cầu nhường/đổi ca đang chờ không còn hiệu lực.`,
+        level: 'INFO',
+        link: '/lich-truc/yeu-cau',
+        module: 'DUTY',
+        entityId: String(id),
+      });
+    }
     this.core.emit('period', id);
-    return { ok: true };
+    return { ok: true, notified: perUser.size };
   }
 
   /** Công bố: NHAP → CONG_BO. Kiểm tra đủ người (nếu cấu hình bắt buộc) rồi báo cho từng người trực. */
@@ -858,11 +980,24 @@ export class DutyService {
   async createAbsence(user: AccessContext, dto: AbsenceDto) {
     const userId = dto.userId ?? user.id;
     if (dto.startDate > dto.endDate) throw new BadRequestException('Ngày bắt đầu phải trước hoặc trùng ngày kết thúc');
+    if (!this.core.canManageAny(user) && dto.endDate < bangkokToday()) {
+      throw new BadRequestException('Chỉ ghi nhận nghỉ phép từ hôm nay trở đi; ngày đã qua do quản lý lịch điều chỉnh');
+    }
     if (userId !== user.id) {
       if (!this.core.canManageAny(user)) throw new ForbiddenException('Bạn chỉ được ghi nhận nghỉ phép của chính mình');
       const target = (await this.core.loadUsers(this.db.db, [userId])).get(userId);
       if (!target) throw new NotFoundException('Không tìm thấy nhân viên');
       if (!this.core.isAll(user)) this.core.ensureManageDept(user, target.departmentId, `Nhân viên ${target.fullName}`);
+    }
+    const [overlap] = await this.db.db
+      .select({ startDate: dutyAbsences.startDate, endDate: dutyAbsences.endDate })
+      .from(dutyAbsences)
+      .where(and(eq(dutyAbsences.userId, userId), lte(dutyAbsences.startDate, dto.endDate), gte(dutyAbsences.endDate, dto.startDate)))
+      .limit(1);
+    if (overlap) {
+      throw new ConflictException(
+        `Đã có khoảng nghỉ phép trùng (${fmtDm(overlap.startDate)} – ${fmtDm(overlap.endDate)}). Xoá bản ghi cũ trước khi nhập lại.`,
+      );
     }
     const [row] = await this.db.db
       .insert(dutyAbsences)
@@ -965,6 +1100,7 @@ export class DutyService {
   /* ================================================================ Tổng hợp & xuất */
 
   async summary(user: AccessContext, periodId: number) {
+    if (!this.core.canManageAny(user)) throw new ForbiddenException('Chỉ người quản lý lịch mới xem được tổng hợp giờ trực');
     await this.getPeriodView(user, periodId);
     const rows = await this.db.db
       .select({

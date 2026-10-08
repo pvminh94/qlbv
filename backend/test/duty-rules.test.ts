@@ -9,6 +9,7 @@ import {
   addDays,
   evaluateCandidate,
   isNightWindow,
+  rangesOverlap,
   isoWeekday,
   normalizeRules,
   shiftInterval,
@@ -231,4 +232,11 @@ test('kiểm tra không tự so với chính ô đang xét (không báo trùng g
 test('thông báo đăng ký: lý do chặn đăng ký hiển thị đúng', () => {
   const r = evaluateCandidate(input({ slot: slotOf(17, '2026-10-06', 'S'), registrationBlocked: 'Đăng ký mở từ 05/10/2026' }));
   assert.ok(codes(r).includes('REGISTRATION'));
+});
+
+test('kỳ lịch: hai khoảng ngày giao nhau (kể cả chung một ngày) thì trùng; liền kề thì không', () => {
+  assert.equal(rangesOverlap('2026-10-05', '2026-10-11', '2026-10-11', '2026-10-18'), true);
+  assert.equal(rangesOverlap('2026-10-05', '2026-10-11', '2026-10-12', '2026-10-18'), false);
+  assert.equal(rangesOverlap('2026-10-05', '2026-10-31', '2026-10-10', '2026-10-12'), true);
+  assert.equal(rangesOverlap('2026-10-10', '2026-10-12', '2026-10-05', '2026-10-31'), true);
 });

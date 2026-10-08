@@ -40,6 +40,15 @@ const tag = Date.now().toString(36).toUpperCase();
 
 console.log('▸ Chuẩn bị tài khoản thử nghiệm');
 const admin = client(await login('admin', 'Admin@123'));
+// Dọn dữ liệu kiểm thử còn sót từ lần chạy trước (kỳ lịch trùng ngày và ngày nghỉ bị chặn theo ràng buộc)
+{
+  const list = await admin('GET', '/duty/periods');
+  const stale = (list.data ?? []).filter((p) => /(Lịch trực kiểm thử|Nháp|Trùng|Mở sau chốt|Xoá kiểm thử) [0-9A-Z]{6,}$/.test(p.name));
+  for (const p of stale) await admin('POST', `/duty/periods/${p.id}/delete`, { reason: 'Dọn dữ liệu kiểm thử còn sót', confirmName: p.name });
+  const cds = await admin('GET', '/duty/closed-days?pageSize=200');
+  const items = Array.isArray(cds.data) ? cds.data : (cds.data?.items ?? []);
+  for (const c of items.filter((c) => /^(Nghỉ kiểm thử|Trùng ô)/.test(c.name))) await admin('DELETE', `/duty/closed-days/${c.id}`);
+}
 const mkUser = async (suffix, title, roleCodes) => {
   const username = `duty_${suffix}_${tag}`.toLowerCase();
   const r = await admin('POST', '/users', { username, fullName: `Nhân viên ${suffix.toUpperCase()}`, password: 'Test@12345', title, roleCodes, mustChangePassword: false });
@@ -259,6 +268,8 @@ check('mở chốt bắt buộc lý do đủ dài', unlNoReason.status === 400, 
 console.log('▸ Báo cáo, nhật ký, xuất Excel');
 const sum = await khth('GET', `/duty/periods/${PID}/summary`);
 check('tổng hợp giờ trực theo người', sum.status === 200 && sum.data.items.length >= 3 && typeof sum.data.fairness.gapHours === 'number', sum.msg);
+const sumBS = await bs1('GET', `/duty/periods/${PID}/summary`);
+check('nhân viên không xem được tổng hợp giờ của cả kỳ (403)', sumBS.status === 403, sumBS.status);
 const logs = await khth('GET', `/duty/periods/${PID}/logs`);
 const acts = new Set((logs.data ?? []).map((l) => l.action));
 check('nhật ký ghi đủ các thao tác chính', ['PUBLISH', 'LOCK', 'ASSIGN', 'SWAP', 'EXCEPTION', 'OVERRIDE', 'UNLOCK'].every((a) => acts.has(a)), [...acts].join(','));
@@ -270,13 +281,53 @@ const gridBS = await bs1('GET', `/duty/periods/${PID}/grid`);
 check('nhân viên xem lưới nhưng không thấy danh sách nghỉ phép', gridBS.status === 200 && gridBS.data.absences.length === 0);
 
 console.log('▸ Hiển thị theo trạng thái & dọn dẹp');
-const nh = await khth('POST', '/duty/periods', { name: `Nháp ${tag}`, startDate: day(0), endDate: day(0), lockAt: lockAt });
+const nh = await khth('POST', '/duty/periods', { name: `Nháp ${tag}`, startDate: day(10), endDate: day(10), lockAt: lockAt });
+check('kỳ nháp tạo được ngoài khoảng kỳ chính', nh.status < 300, nh.msg);
 const hideNh = await bs1('GET', `/duty/periods/${nh.data.id}`);
 check('kỳ nháp: nhân viên không thấy (404)', hideNh.status === 404, hideNh.status);
-const delNh = await khth('DELETE', `/duty/periods/${nh.data.id}`);
-check('xoá kỳ nháp rỗng', delNh.status < 300, delNh.msg);
-const delPub = await khth('DELETE', `/duty/periods/${PID}`);
-check('không xoá được kỳ đã công bố', delPub.status === 409, delPub.msg);
+
+console.log('▸ Ràng buộc chặt chẽ: trùng kỳ, mở đăng ký, ngày nghỉ, ca/vai trò đang dùng, nghỉ phép');
+const ovP = await khth('POST', '/duty/periods', { name: `Trùng ${tag}`, startDate: day(2), endDate: day(3), lockAt });
+check('không tạo kỳ trùng ngày với kỳ khác (409)', ovP.status === 409, ovP.msg);
+const ovEdit = await khth('PUT', `/duty/periods/${nh.data.id}`, { startDate: day(4), endDate: day(4) });
+check('đổi ngày kỳ nháp sang khoảng đang thuộc kỳ khác bị chặn (409)', ovEdit.status === 409, ovEdit.msg);
+const winBad = await khth('POST', '/duty/periods', { name: `Mở sau chốt ${tag}`, startDate: day(20), endDate: day(20), lockAt, registrationOpensAt: new Date(Date.now() + 48 * 3600e3).toISOString() });
+check('mở đăng ký phải trước mốc chốt (400)', winBad.status === 400, winBad.msg);
+const cdBad = await khth('POST', '/duty/closed-days', { date: day(0), name: `Trùng ô ${tag}` });
+check('không đánh dấu ngày nghỉ khi đã có ô trực (409)', cdBad.status === 409, cdBad.msg);
+const shiftBad = await khth('PUT', `/duty/shifts/${S.value}`, { startTime: '06:30' });
+check('không đổi giờ ca đang được dùng (409)', shiftBad.status === 409, shiftBad.msg);
+const roleBad = await khth('PUT', `/duty/roles/${BS.value}`, { requiredTitle: 'Điều dưỡng' });
+check('không đổi chức danh vai trò đang được dùng (409)', roleBad.status === 409, roleBad.msg);
+const pastAbs = await bs1('POST', '/duty/absences', { startDate: addDays(todayBkk, -3), endDate: addDays(todayBkk, -2), reason: 'KHAC' });
+check('nhân viên không khai nghỉ cho ngày đã qua (400)', pastAbs.status === 400, pastAbs.msg);
+const a1 = await khth('POST', '/duty/absences', { userId: dd2U.id, startDate: day(12), endDate: day(12), reason: 'KHAC', note: 'Kiểm thử trùng' });
+const a2 = await khth('POST', '/duty/absences', { userId: dd2U.id, startDate: day(11), endDate: day(12), reason: 'KHAC' });
+check('nghỉ phép không được trùng khoảng đã khai (409)', a1.status < 300 && a2.status === 409, a2.msg);
+if (a1.data?.id) await khth('DELETE', `/duty/absences/${a1.data.id}`);
+
+console.log('▸ Xoá cả kỳ lịch (lý do, gõ lại tên; nhân viên đã xếp được thông báo)');
+const dName = `Xoá kiểm thử ${tag}`;
+const dp = await khth('POST', '/duty/periods', { name: dName, startDate: day(14), endDate: day(15), lockAt });
+const DPID = dp.data.id;
+await khth('POST', `/duty/periods/${DPID}/slots/generate`, { roomIds: [P1.value], shiftIds: [S.value], roleIds: [BS.value], weekdays: [1] });
+const dSlot = (await khth('GET', `/duty/periods/${DPID}/grid`)).data.slots[0];
+const dAs = await khth('POST', `/duty/slots/${dSlot.id}/assignments`, { userId: dd1U.id });
+check('kỳ kiểm thử xoá: đã xếp một người', dAs.status < 300, dAs.msg);
+const pubD = await khth('POST', `/duty/periods/${DPID}/publish`, {});
+check('kỳ kiểm thử xoá: đã công bố', pubD.status < 300, pubD.msg);
+const delNoName = await khth('POST', `/duty/periods/${DPID}/delete`, { reason: 'Kiểm thử xoá kỳ', confirmName: 'sai tên' });
+check('xoá kỳ: sai tên xác nhận bị chặn (400)', delNoName.status === 400, delNoName.msg);
+const delShort = await khth('POST', `/duty/periods/${DPID}/delete`, { reason: 'ngắn', confirmName: dName });
+check('xoá kỳ: lý do quá ngắn bị chặn (400)', delShort.status === 400, delShort.msg);
+const delStaff = await bs1('POST', `/duty/periods/${DPID}/delete`, { reason: 'Nhân viên thử xoá', confirmName: dName });
+check('nhân viên không xoá được kỳ (403)', delStaff.status === 403, delStaff.status);
+const delOk = await khth('POST', `/duty/periods/${DPID}/delete`, { reason: 'Kiểm thử: xoá kỳ đã công bố', confirmName: dName });
+check('xoá kỳ đã công bố khi đúng xác nhận (200, báo người bị ảnh hưởng)', delOk.status < 300 && delOk.data.notified >= 1, delOk.msg);
+const gone = await khth('GET', `/duty/periods/${DPID}`);
+check('kỳ đã xoá không còn (404)', gone.status === 404, gone.status);
+const delNh = await khth('POST', `/duty/periods/${nh.data.id}/delete`, { reason: 'Kiểm thử xoá kỳ nháp', confirmName: `Nháp ${tag}` });
+check('xoá kỳ nháp (chưa có người được xếp)', delNh.status < 300, delNh.msg);
 const delCd = await khth('DELETE', `/duty/closed-days/${cd.data.id}`);
 check('dọn ngày nghỉ kiểm thử', delCd.status < 300, delCd.msg);
 const delRoom = await khth('DELETE', `/duty/rooms/${tmpRoom.data.id}`);
@@ -284,5 +335,7 @@ check('dọn phòng kiểm thử (chưa có ô → xoá được)', delRoom.stat
 const usedRoom = await khth('DELETE', `/duty/rooms/${P1.value}`);
 check('không xoá phòng đang có ô trực (chỉ tắt)', usedRoom.status === 409, usedRoom.msg);
 
+const delPid = await khth('POST', `/duty/periods/${PID}/delete`, { reason: 'Dọn dữ liệu kiểm thử sau khi chạy xong', confirmName: `Lịch trực kiểm thử ${tag}` });
+check('dọn kỳ lịch kiểm thử chính sau khi chạy xong', delPid.status < 300, delPid.msg);
 console.log(`\nKết quả: ${ok} đạt, ${fail} lỗi`);
 process.exit(fail ? 1 : 0);
