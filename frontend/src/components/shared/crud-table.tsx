@@ -22,7 +22,7 @@ export interface CrudOption {
 export interface CrudField {
   name: string;
   label: string;
-  type?: 'text' | 'number' | 'password' | 'textarea' | 'select' | 'switch' | 'date' | 'email' | 'tags';
+  type?: 'text' | 'number' | 'password' | 'textarea' | 'select' | 'switch' | 'date' | 'time' | 'datetime' | 'email' | 'tags';
   options?: CrudOption[];
   required?: boolean;
   placeholder?: string;
@@ -481,7 +481,14 @@ export function CrudTable({
                 ) : (
                   <Input
                     id={`f-${f.name}`}
-                    type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : f.type === 'password' ? 'password' : 'text'}
+                    type={
+                      f.type === 'number' ? 'number'
+                        : f.type === 'date' ? 'date'
+                        : f.type === 'time' ? 'time'
+                        : f.type === 'datetime' ? 'datetime-local'
+                        : f.type === 'password' ? 'password'
+                        : 'text'
+                    }
                     value={String(form[f.name] ?? '')}
                     onChange={(e) => setForm((s) => ({ ...s, [f.name]: e.target.value }))}
                     placeholder={f.placeholder}

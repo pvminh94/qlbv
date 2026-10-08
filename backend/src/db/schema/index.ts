@@ -10,3 +10,4 @@ export * from './printing';
 export * from './ops';
 export * from './assets';
 export * from './studio';
+export * from './duty';

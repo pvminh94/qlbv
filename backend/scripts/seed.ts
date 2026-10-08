@@ -25,6 +25,9 @@ import {
   DEMO_DEPARTMENTS,
   DEMO_REPORT_TEMPLATE,
   DEFAULT_JOB_TITLES,
+  DEFAULT_DUTY_ROOMS,
+  DEFAULT_DUTY_SHIFTS,
+  DEFAULT_DUTY_ROLES,
   DEFAULT_WORKFLOW,
   PERMISSIONS,
   ROLES,
@@ -236,6 +239,35 @@ async function seedDepartments(): Promise<void> {
     log(`+ ${dept.code} — ${dept.name}`);
   }
   log(`Tổng ${codeToId.size} đơn vị`);
+}
+
+/** Danh mục lịch trực mặc định (phòng, ca, vai trò) — chỉ thêm mục còn thiếu, không ghi đè chỉnh sửa của quản trị */
+async function seedDutyCatalog(): Promise<void> {
+  await db
+    .insert(schema.dutyRooms)
+    .values(DEFAULT_DUTY_ROOMS.map((r) => ({ code: r.code, name: r.name, sortOrder: r.sortOrder })))
+    .onConflictDoNothing();
+  await db
+    .insert(schema.dutyShiftTypes)
+    .values(
+      DEFAULT_DUTY_SHIFTS.map((s) => ({
+        code: s.code,
+        name: s.name,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        crossesMidnight: s.endTime <= s.startTime,
+        isNight: s.isNight,
+        color: s.color,
+        sortOrder: s.sortOrder,
+        active: s.active,
+      })),
+    )
+    .onConflictDoNothing();
+  await db
+    .insert(schema.dutyRoles)
+    .values(DEFAULT_DUTY_ROLES.map((r) => ({ code: r.code, name: r.name, requiredTitle: r.requiredTitle, sortOrder: r.sortOrder })))
+    .onConflictDoNothing();
+  log(`+ danh mục lịch trực mặc định (${DEFAULT_DUTY_ROOMS.length} phòng, ${DEFAULT_DUTY_SHIFTS.length} ca, ${DEFAULT_DUTY_ROLES.length} vai trò)`);
 }
 
 async function seedJobTitles(): Promise<void> {
@@ -579,6 +611,7 @@ async function main(): Promise<void> {
     await seedReportTemplates();
   }
   await seedJobTitles();
+  await seedDutyCatalog();
   await seedWorkflow();
   await seedUtilities();
   await seedJobs();

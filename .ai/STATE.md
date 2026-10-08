@@ -73,12 +73,31 @@
 | 10 | **Bản in mặc định Times New Roman** (kể cả xem trước PDF) + **trình thiết kế bản in toàn màn hình** kiểu phần mềm thương mại | 8b4fba3 |
 | 10b | Docker build ổn định (bỏ `# syntax=`, update.sh thử lại 3 lần, gợi ý swap) — người dùng xác nhận VPS cập nhật OK | c63401e |
 | 12 | Dọn workspace, tạo thư mục `.ai/` (STATE.md, dev-setup.sh, examples) | c79caa1 |
-| 13 GĐ1 | **Phân hệ Quản lý tài sản — lõi**: schema+migration 0006, API (danh mục, hồ sơ, chứng từ duyệt, khấu hao TT23/tháng/DB, in tem, biên bản PDF, import/export), 11 trang giao diện `/tai-san/*`, `/ts/<mã>` | (commit này) |
-| 13 GĐ2 | **Kiểm kê điện tử · báo cáo · lịch bảo trì**: migration 0007 (asset_inventories/items/scans), quét camera+máy quét+**offline (idempotent clientId)**, kiểm kê mù, khoá/mở số liệu, xử lý chênh lệch → chứng từ nháp, biên bản PDF `BIEN_BAN_KIEM_KE` + Excel; **8 báo cáo chuẩn** `/asset-reports/:key` (xem, Excel, PDF — dòng nhóm/cộng, `__style` cho renderer); **lịch bảo trì tháng** `/asset-reports/schedule` (lần lặp dự kiến + quá hạn, ICS client-side); tác vụ `NHAC_HAN_TAI_SAN`/handler `asset.due-reminder`; quyền `asset.inventory.*`, `asset.report.view`; trang `/tai-san/kiem-ke*`, `bao-cao`, `bao-tri`; test `.ai/examples/asset-inventory-test.mjs` (57 ca) + `asset-inventory-ui-test.js` | (commit này) |
+| 13 GĐ1 | **Phân hệ Quản lý tài sản — lõi**: schema+migration 0006, API (danh mục, hồ sơ, chứng từ duyệt, khấu hao TT23/tháng/DB, in tem, biên bản PDF, import/export), 11 trang giao diện `/tai-san/*`, `/ts/<mã>` | e0902ce |
+| 13 GĐ2 | **Kiểm kê điện tử · báo cáo · lịch bảo trì**: migration 0007 (asset_inventories/items/scans), quét camera+máy quét+**offline (idempotent clientId)**, kiểm kê mù, khoá/mở số liệu, xử lý chênh lệch → chứng từ nháp, biên bản PDF `BIEN_BAN_KIEM_KE` + Excel; **8 báo cáo chuẩn** `/asset-reports/:key` (xem, Excel, PDF — dòng nhóm/cộng, `__style` cho renderer); **lịch bảo trì tháng** `/asset-reports/schedule` (lần lặp dự kiến + quá hạn, ICS client-side); tác vụ `NHAC_HAN_TAI_SAN`/handler `asset.due-reminder`; quyền `asset.inventory.*`, `asset.report.view`; trang `/tai-san/kiem-ke*`, `bao-cao`, `bao-tri`; test `.ai/examples/asset-inventory-test.mjs` (57 ca) + `asset-inventory-ui-test.js` | c94c835 |
+| 13 GĐ3a | Realtime SSE + bảng điều khiển / báo cáo tuỳ biến kéo-thả (Studio) | ee558e2 |
+| 13 GĐ3b | Studio: drill-down bản ghi gốc, 5 nguồn dữ liệu mới, ấn bản Excel định kỳ (subscription) | 5ded9bb |
+| — | Sửa khoa/phòng không tự cập nhật sau thêm/xoá; thêm loại đơn vị "Ban" | 4d0effc |
+| — | Từ điển dữ liệu tiếng Việt cho toàn bộ CSDL (COMMENT ON bảng/cột/khoá) | 5f37d99 |
+| — | Hoàn thiện phân quyền & vai trò (an toàn, trực quan, chặt chẽ) | 89b2e73 |
+| — | HSBA chuẩn thương mại: trao đổi nội bộ, tệp minh chứng, ký nhanh, chống trùng phiếu | 7b9f335 |
+| — | Cho phép tạo lại tên đăng nhập / mã đơn vị đã xoá mềm | 2911ac0 |
+| — | Vai trò mặc định khi import Excel; độ dài mật khẩu theo cấu hình | 9c48437 |
+| — | Mật khẩu mặc định người dùng đổi từ Qlbs@123456 sang "1" (chore) | e9ae076 |
+| — | Deploy: sửa lỗi EACCES khi cài lần đầu trên máy trắng | 47aba0b |
+| — | Hệ thống thông báo chuyên sâu; sắp xếp cột danh sách | 3846e85 |
+| — | HSBA: thêm bước ký Bảo hiểm giữa KHTB và Tài chính; chỉ KHTB/BAO_HIEM được trả lại | 9697ae3 |
+| — | Tìm kiếm toàn cục ổn định; lọc nâng cao; hết trang trống do phiên | 61c62d6 |
+| — | HSBA: ô tìm kiếm tự lọc (debounce 350 ms), nút xoá nhanh | 9c7ac86 |
+| — | HSBA: danh sách phiếu tự cập nhật realtime | 3355ad1 |
+| — | HSBA: bỏ ô "Số tiền liên quan" và "Tài liệu kèm theo" khỏi form phiếu | 986e204 |
+| 14 | **Lịch trực khám bệnh**: kỳ lịch tuần, ô trực, ràng buộc (nghỉ tối thiểu, giờ/ngày, giờ/tuần, chức danh, nghỉ phép, khác khoa), tự đăng ký, nhường/đổi, ngoại lệ gửi KHTH, điều chỉnh trực tiếp, chốt theo mốc, nhật ký, Excel, thông báo và realtime | (commit này) |
 
 Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-label].json.gz` v2.
 
-## 5. Kiến trúc bản in (Yêu cầu 10) — tham chiếu nhanh
+## 5. Kiến trúc tham chiếu nhanh (bản in · lịch trực)
+
+### Bản in (Yêu cầu 10)
 
 - **Font** `backend/src/infra/rendering/font-registry.ts`: mặc định `Times New Roman`; ưu tiên font tải lên ở `STORAGE_DIR/fonts` (VPS: `data/uploads/fonts`), fallback nhúng sẵn Tinos/Arimo/Cousine (`backend/assets/fonts`, OFL). Tự nạp lại mỗi 5s. API: `GET/POST/DELETE /print/fonts`, `GET /print/fonts/file`.
 - **Renderer** `backend/src/infra/rendering/pdf-renderer.ts` (`renderPrintDocument`): toạ độ mm; phần tử `text|field|table|line|rect|image|pageNumber|datetime|qrcode|barcode|signature`; `{path}` interpolate, `formatValue`, anchor header/footer, `repeatOnEveryPage`, `visibleWhen`, `autoShrink`, bảng nhiều trang (`dataSource`, zebra, totalRow, pushDown), watermark, pageNumbering, `data.system.{day,month,year,date,datetime,page,pages}`. Mọi PDF (HSBA, báo cáo) đi qua renderer này.
@@ -88,9 +107,39 @@ Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-lab
   - `designer-canvas.tsx` (thước, lưới, marquee, smart guides, resize, sửa chữ trực tiếp, `DND_MIME`), `element-view.tsx` (vẽ phần tử giống PDF), `designer-inspector.tsx`, `preview-dialog.tsx` (dữ liệu mẫu/phiếu HSBA thật/JSON), `font-manager.tsx`, `print-fonts.ts` (`usePrintFonts`), `print-format.ts` (`buildSampleData`, format), `print-types.ts`.
   - Trang `frontend/src/app/(app)/quan-tri/mau-in/page.tsx`: danh sách mẫu + mở designer; "Thông tin mẫu" là dialog; lưu giữ designer mở.
 
+### Lịch trực khám bệnh — tham chiếu nhanh
+- Lõi thuần `backend/src/modules/duty/duty-rules.ts` (`evaluateCandidate`, `shiftInterval`, `isNightWindow`, `normalizeRules`): mọi thời điểm theo Asia/Bangkok (+07:00); kiểm thử `backend/test/duty-rules.test.ts` (`npm test`).
+- Service: `duty-core.service.ts` (phạm vi quyền, nạp theo lô và `evaluatePairs`, thông báo sau commit, nhật ký, realtime topic `duty`), `duty.service.ts` (kỳ, ô, phân công, lưới, nghỉ phép, tổng hợp giờ, Excel), `duty-request.service.ts` (nhường/đổi/ngoại lệ/điều chỉnh), `duty-catalog.service.ts` (danh mục). Controller: `duty.controller.ts`, `duty-request.controller.ts`, `duty-catalog.controller.ts`.
+- Khoá: transaction + `FOR UPDATE` trên ô + `pg_advisory_xact_lock(9301, userId)`, luôn theo thứ tự id tăng dần; truyền `tx` vào hàm nội bộ.
+- Migration `backend/drizzle/0015_lich_truc.sql` (idempotent: bảng, khoá, quyền `duty.*`, vai trò `DIEU_PHOI_TRUC` và `NHAN_VIEN_TRUC`, gán quyền cho vai trò cũ). Seed: `seed-data.ts` (quyền, vai trò, danh mục mặc định `DEFAULT_DUTY_*`) và `scripts/seed.ts` (`seedDutyCatalog`, chỉ thêm mục còn thiếu).
+- Từ điển dữ liệu: ghi chú các bảng/cột `duty_*` nằm trong `backend/src/db/schema-comments.ts`.
+- Kiểm thử: `node .ai/examples/duty-api-test.mjs` (API :4000, 77 kiểm tra, tạo dữ liệu mới mỗi lần chạy) và `.ai/examples/duty-ui-test.mjs` (Playwright, chụp ảnh `/tmp/shots`, báo lỗi console).
+
 ## 6. Việc đang mở / đề xuất
 
-### Yêu cầu 13 (đang làm): Phân hệ QUẢN LÝ TÀI SẢN + báo cáo/dashboard + realtime + làm lại RBAC
+### Yêu cầu 14 (đã làm trong lượt này): Lịch trực khám bệnh
+Nguyên văn (tóm): đọc STATE và codebase `pvminh94/qlbv`; viết trang "lịch trực khám bệnh" để nhập lịch trực; đầy đủ tính năng chuẩn chuyên nghiệp; có thời gian chốt lịch; khi sự cố đổi người trực ngoài dự kiến thì báo KHTH, KHTH có tài khoản đổi trực để xử lý ngoại lệ; chủ động thêm ràng buộc thực tế; cấu hình linh động (danh mục phòng khám và danh mục ca trực); giao diện thương mại, đẹp, responsive; thông suốt.
+
+**Đã làm:** backend, migration, quyền, vai trò, danh mục mặc định, từ điển dữ liệu, giao diện `/lich-truc/*` (lưới tuần; trên điện thoại hiển thị theo ngày), nhóm menu "Lịch trực", tài liệu `docs/API.md` (mục Lịch trực), `PHAN-QUYEN.md` (§8), `KIEN-TRUC.md` (§8), `HUONG-DAN-SU-DUNG.md` (§11).
+
+**Kiểm thử đã chạy:** `npm test` 19/19 (lõi ràng buộc); `duty-api-test.mjs` 77/77 (kể cả nhường, đổi hai chiều, ngoại lệ sau chốt, điều chỉnh, mở chốt theo mốc thời gian, xuất Excel, phân quyền 403); `next build` đạt; Playwright chụp 7 trang máy tính và điện thoại, không có lỗi console.
+
+**Giả định cần người dùng xác nhận (đã đặt làm mặc định, sửa được trong Danh mục / Kỳ lịch):**
+- Ca: S 07:00–12:00, C 12:00–17:00, CD 07:00–17:00; ca đêm D 17:00–07:00 đang TẮT.
+- 15 phòng "Phòng khám số 1…15" là placeholder, chưa gắn khoa. Cần khai báo phòng thật và khoa quản lý; phòng chưa gắn khoa chỉ Điều phối toàn viện xếp được.
+- Ràng buộc mặc định: nghỉ tối thiểu 12 giờ giữa hai ca; ≤10 giờ/ngày; ≤48 giờ/tuần; khác khoa chỉ cảnh báo; đổi/nhường ca cần duyệt; ca sáng + chiều liền nhau được phép (theo mẫu lịch thật); tự đăng ký bật.
+- Ai được cấp `DIEU_PHOI_TRUC` (tài khoản đổi trực của KHTH) và `NHAN_VIEN_TRUC` (bác sĩ, điều dưỡng).
+
+**Chưa làm / lưu ý:**
+- Thông báo dùng trung tâm thông báo trong ứng dụng; chưa kiểm chứng kênh ngoài (email, Zalo) trong luồng lịch trực.
+- Playwright mới chụp ảnh và kiểm tra không lỗi console các trang chính; luồng hộp thoại (xếp người, nhường ca, duyệt) kiểm thử qua API, chưa bấm thử trên trình duyệt thật.
+- Giai đoạn 2 (chưa bắt đầu): máy chủ sinh trắc học (khuôn mặt…), dashboard quản lý máy chủ, app tại máy phòng bác sĩ. Điểm tích hợp đã định: "ai đang trực phòng X tại thời điểm T" từ `duty_assignments` ⋈ `duty_slots` ⋈ `duty_shift_types`.
+
+### Việc chờ người dùng
+- **Dự án máy phòng khám mở khoá tự động** (ngoài repo, `/home/user/phongkham-unlock/`): vẫn còn hiệu lực, chưa là trọng tâm. Chưa trả lời: (a) phần mềm khám bệnh là app cài máy hay web; (b) bác sĩ có tài khoản riêng hay dùng chung; (c) iPhone hay Android, có chấp nhận Face ID hoặc vân tay; (d) hostname nội bộ và chứng chỉ HTTPS; (e) dải IP Wi-Fi nhân viên; (f) xác nhận S = sáng, C = chiều, ô không tiền tố = cả ngày, có lấy Thứ 7 không, mốc 12:00; (g) số phòng chính xác; (h) có VM Windows 10 Pro không; (i) khi bác sĩ rời phòng có cần khoá lại không. Ràng buộc đã biết: không webcam, không Bluetooth, Windows 10 Pro, tự code (không dựa Assigned Access hay Shell Launcher); mở máy chỉ khi đúng bác sĩ được xếp đúng phòng và đúng ca; mỗi yêu cầu dùng một lần, hạn khoảng 60 giây; có nhật ký.
+- **Chưa rõ:** có gộp phần tài liệu và tài sản đang dở trong `STATE.md` thành một mục hay không.
+
+### Yêu cầu 13 (GĐ1–GĐ3b đã có commit, xem mục 4): Phân hệ QUẢN LÝ TÀI SẢN + báo cáo/dashboard + realtime + làm lại RBAC
 Nguyên văn: "viết tiếp phân hệ quản lý tài sản chuyên nghiệp, chi tiết, chuyên sâu, barcode, kiểm kê, in tem… tích hợp đồng bộ, logic với tính năng hiện tại, thêm phần quản lý tạo, edit report, dashboard cho từng phân hệ… cực đẹp chuyên nghiệp, đồng bộ thời gian thực…, cải tiến user, role, permission dễ nhìn, logic, chuyên sâu".
 
 **Quyết định của người dùng (ask_user):**

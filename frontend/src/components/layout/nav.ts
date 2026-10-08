@@ -4,6 +4,9 @@ import {
   BarChart3,
   Building2,
   CalendarClock,
+  CalendarDays,
+  CalendarRange,
+  UserCheck,
   ClipboardList,
   FileSpreadsheet,
   FileText,
@@ -92,6 +95,16 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/tai-san/in-tem', label: 'In tem QR / mã vạch', icon: QrCode, permission: 'asset.label.print' },
       { href: '/tai-san/tra-cuu', label: 'Quét mã', icon: ScanLine, permission: 'asset.view' },
       { href: '/tai-san/danh-muc', label: 'Danh mục tài sản', icon: FolderTree, permission: 'asset.catalog.view' },
+    ],
+  },
+  {
+    label: 'Lịch trực',
+    items: [
+      { href: '/lich-truc', label: 'Lịch trực tuần', icon: CalendarDays, permission: 'duty.view' },
+      { href: '/lich-truc/cua-toi', label: 'Lịch của tôi', icon: UserCheck, permission: 'duty.register' },
+      { href: '/lich-truc/yeu-cau', label: 'Yêu cầu đổi trực', icon: ArrowLeftRight, permission: 'duty.register' },
+      { href: '/lich-truc/ky-lich', label: 'Kỳ lịch & công bố', icon: CalendarRange, permission: 'duty.period.manage' },
+      { href: '/lich-truc/danh-muc', label: 'Danh mục trực', icon: Settings2, permission: 'duty.catalog.manage' },
     ],
   },
   {

@@ -175,6 +175,17 @@ export const PERMISSIONS: PermissionSeed[] = [
   P('backup', 'restore', 'Phục hồi từ bản sao lưu'),
   P('file', 'upload', 'Tải tệp lên'),
   P('file', 'delete', 'Xoá tệp đã tải lên'),
+
+  // Lịch trực khám bệnh
+  P('duty', 'view', 'Xem lịch trực', 'Xem lịch trực các phòng khám và kỳ lịch đã công bố'),
+  P('duty', 'register', 'Đăng ký / nhường / đổi ca của mình', 'Tự đăng ký ca trống, nhường hoặc đổi ca, báo nghỉ phép của chính mình'),
+  P('duty', 'manage', 'Phân công trực (trong khoa)', 'Tạo ô trực, phân công/gỡ người trực, ghi nhận nghỉ phép — trong phạm vi khoa được giao'),
+  P('duty', 'manage-all', 'Điều phối toàn viện', 'Phân công mọi phòng khám; bỏ qua ràng buộc khi có lý do (ghi nhật ký)'),
+  P('duty', 'period.manage', 'Lập, chốt và công bố kỳ lịch', 'Tạo kỳ lịch, cấu hình ràng buộc, công bố, chốt sớm và mở chốt'),
+  P('duty', 'catalog.manage', 'Quản lý danh mục trực', 'Phòng khám, ca trực, vai trò trực, ngày nghỉ'),
+  P('duty', 'swap.approve', 'Duyệt đổi/nhường ca', 'Duyệt yêu cầu đổi/nhường ca trước khi chốt (trong phạm vi khoa)'),
+  P('duty', 'exception.resolve', 'Xử lý ngoại lệ đổi trực (KHTH)', 'Duyệt ngoại lệ sau khi chốt và đổi trực trực tiếp — tài khoản đổi trực'),
+  P('duty', 'export', 'Xuất / in lịch trực', 'Xuất Excel lịch trực và bảng tổng hợp giờ trực'),
 ];
 
 /* ------------------------------------------------------------------------ Vai trò */
@@ -213,6 +224,7 @@ export const ROLES: RoleSeed[] = [
     color: '#ea580c',
     isSystem: true,
     permissions: [
+      'duty.view', 'duty.catalog.manage',
       // Tổng quan & Studio (thiết kế trang cho cả hệ thống dùng)
       'dashboard.view', 'dashboard.view-all',
       'studio.dashboard.view', 'studio.dashboard.manage',
@@ -259,6 +271,7 @@ export const ROLES: RoleSeed[] = [
     color: '#be185d',
     isSystem: true,
     permissions: [
+      'duty.view',
       'dashboard.view', 'dashboard.view-all',
       'studio.dashboard.view', 'studio.report.view',
       // HSBA: chỉ xem/toàn viện/in
@@ -287,6 +300,7 @@ export const ROLES: RoleSeed[] = [
     color: '#2563eb',
     isSystem: true,
     permissions: [
+      'duty.view', 'duty.register', 'duty.manage', 'duty.manage-all', 'duty.period.manage', 'duty.swap.approve', 'duty.exception.resolve', 'duty.export',
       'dashboard.view', 'dashboard.view-all',
       'studio.dashboard.view', 'studio.report.view',
       'hsba.request.view', 'hsba.request.view-all',
@@ -370,6 +384,7 @@ export const ROLES: RoleSeed[] = [
     color: '#7c3aed',
     isSystem: true,
     permissions: [
+      'duty.view', 'duty.register', 'duty.manage', 'duty.swap.approve', 'duty.export',
       'dashboard.view',
       'studio.dashboard.view', 'studio.report.view',
       // Báo cáo của khoa mình
@@ -438,6 +453,33 @@ export const ROLES: RoleSeed[] = [
       'report.export.excel', 'report.export.pdf',
       'utility.view',
     ],
+  },
+
+  /* ============================ LỊCH TRỰC KHÁM BỆNH ============================ */
+  {
+    code: 'DIEU_PHOI_TRUC',
+    name: 'Điều phối lịch trực (KHTH)',
+    description:
+      'Lập kỳ lịch, chốt và công bố lịch trực; quản lý danh mục phòng/ca; duyệt ngoại lệ và đổi trực khẩn sau khi chốt (tài khoản đổi trực)',
+    dataScope: 'ALL',
+    priority: 25,
+    color: '#0891b2',
+    isSystem: true,
+    permissions: [
+      'duty.view', 'duty.register', 'duty.manage', 'duty.manage-all', 'duty.period.manage',
+      'duty.catalog.manage', 'duty.swap.approve', 'duty.exception.resolve', 'duty.export',
+    ],
+  },
+  {
+    code: 'NHAN_VIEN_TRUC',
+    name: 'Nhân viên trực khám',
+    description:
+      'Bác sĩ, điều dưỡng tham gia trực phòng khám: xem lịch chung, tự đăng ký ca trống, nhường/đổi ca và báo nghỉ phép',
+    dataScope: 'OWN',
+    priority: 90,
+    color: '#16a34a',
+    isSystem: true,
+    permissions: ['duty.view', 'duty.register'],
   },
 ];
 
@@ -900,4 +942,34 @@ export const DEFAULT_JOB_TITLES: { code: string; name: string }[] = [
   { code: 'HS', name: 'Hộ sinh' },
   { code: 'KT', name: 'Kế toán' },
   { code: 'NV', name: 'Nhân viên' },
+];
+
+/* ============================ LỊCH TRỰC: DANH MỤC MẶC ĐỊNH ============================
+ * Chỉ là giá trị khởi đầu — quản trị có thể sửa/tắt trong màn "Danh mục" của Lịch trực.
+ * Ca đêm (D) để tắt sẵn; bật khi phòng khám có trực đêm. */
+export const DEFAULT_DUTY_ROOMS: { code: string; name: string; sortOrder: number }[] = Array.from({ length: 15 }, (_, i) => ({
+  code: `P${i + 1}`,
+  name: `Phòng khám số ${i + 1}`,
+  sortOrder: i + 1,
+}));
+
+export const DEFAULT_DUTY_SHIFTS: {
+  code: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  isNight: boolean;
+  color: string;
+  sortOrder: number;
+  active: boolean;
+}[] = [
+  { code: 'S', name: 'Ca sáng', startTime: '07:00', endTime: '12:00', isNight: false, color: '#f59e0b', sortOrder: 1, active: true },
+  { code: 'C', name: 'Ca chiều', startTime: '12:00', endTime: '17:00', isNight: false, color: '#2563eb', sortOrder: 2, active: true },
+  { code: 'CD', name: 'Cả ngày', startTime: '07:00', endTime: '17:00', isNight: false, color: '#7c3aed', sortOrder: 3, active: true },
+  { code: 'D', name: 'Ca đêm', startTime: '17:00', endTime: '07:00', isNight: true, color: '#0f172a', sortOrder: 4, active: false },
+];
+
+export const DEFAULT_DUTY_ROLES: { code: string; name: string; requiredTitle: string; sortOrder: number }[] = [
+  { code: 'BS', name: 'Bác sĩ trực', requiredTitle: 'Bác sĩ', sortOrder: 1 },
+  { code: 'DD', name: 'Điều dưỡng trực', requiredTitle: 'Điều dưỡng', sortOrder: 2 },
 ];

@@ -339,3 +339,43 @@ Sắp xếp: các bảng danh sách nhận `sortBy`/`sortDir` (whitelist từng 
 
 Kênh Telegram (tuỳ chọn, nhóm khoá Cấu hình → Thông báo: `telegram.enabled`, `telegram.botToken`,
 `notify.channel.appUrl`): `GET /api/notify-channels/telegram/status`, `POST /api/notify-channels/telegram/link-code`, `DELETE /api/notify-channels/telegram/link`.
+
+
+## Lịch trực khám bệnh
+
+Tiền tố `/api/duty`. Ngày dạng `YYYY-MM-DD`; thời điểm dạng ISO 8601 có múi giờ (ví dụ `2026-10-10T17:00:00+07:00`). Thông báo gửi với `module: DUTY`. Realtime topic `duty` (lọc theo quyền `duty.view`). Vi phạm ràng buộc trả `409` với thông điệp liệt kê lý do (ví dụ "Trùng giờ với ca …"); dữ liệu sai `400`; thiếu quyền `403`.
+
+| Phương thức | Đường dẫn | Mô tả | Quyền |
+|---|---|---|---|
+| `GET` | `/duty/rooms` · `/duty/shifts` · `/duty/roles` · `/duty/closed-days` | Danh mục phân trang (`q`, `activeOnly`, `page`, `pageSize`) | `duty.view` |
+| `GET` | `/duty/rooms/options` · `/duty/shifts/options` · `/duty/roles/options` | Danh mục gọn cho ô chọn | `duty.view` |
+| `POST` · `PUT` · `DELETE` | `/duty/rooms[/:id]` (tương tự `shifts`, `roles`, `closed-days`) | Thêm / sửa / xoá danh mục. Xoá bị chặn khi đang được dùng trong ô trực (hãy tắt thay vì xoá) | `duty.catalog.manage` |
+| `GET` | `/duty/periods` | Kỳ lịch, kèm `phase` (`NHAP` · `MO` · `CHOT`) và số ô, số người. Bản nháp chỉ người quản lý thấy | `duty.view` |
+| `POST` | `/duty/periods` | Tạo kỳ lịch: `name, startDate, endDate, lockAt, registrationOpensAt?, rules?, note?` | `duty.period.manage` |
+| `GET` · `PUT` · `DELETE` | `/duty/periods/:id` | Xem · sửa (kỳ đã chốt chỉ sửa tên và ghi chú) · xoá (chỉ kỳ nháp rỗng) | `duty.view` · `duty.period.manage` |
+| `POST` | `/duty/periods/:id/publish` | Công bố `{force?}`: kiểm tra ô còn thiếu người, thông báo từng người được xếp | `duty.period.manage` |
+| `POST` | `/duty/periods/:id/lock` | Chốt sớm (trước mốc chốt) | `duty.period.manage` |
+| `POST` | `/duty/periods/:id/unlock` | Mở chốt `{reason, lockAt}` — lý do tối thiểu 5 ký tự, mốc mới phải ở tương lai | `duty.period.manage` |
+| `GET` | `/duty/periods/:id/grid` | Lưới: phòng, ca, vai trò, ngày (kèm ngày nghỉ), ô kèm người trực, nghỉ phép (chỉ quản lý), `viewer` (quyền của người xem) | `duty.view` |
+| `GET` | `/duty/periods/:id/my-options` | Các ca tôi có thể đăng ký, kèm lý do nếu không được | `duty.register` |
+| `GET` | `/duty/periods/:id/summary` | Giờ trực, số ca, ca đêm, số ngày trực theo người; chênh lệch giờ giữa người nhiều nhất và ít nhất | `duty.view` |
+| `GET` | `/duty/periods/:id/logs` | Nhật ký thay đổi (kèm lý do, người thực hiện) | `duty.view` (chỉ người quản lý) |
+| `GET` | `/duty/periods/:id/export` | Xuất Excel: sheet lưới lịch và sheet tổng hợp giờ | `duty.export` |
+| `POST` | `/duty/periods/:id/slots/generate` | Sinh ô hàng loạt `{roomIds, shiftIds, roleIds, weekdays: [1..7], requiredCount?, skipClosedDays?}`, tối đa 4000 ô | `duty.manage` · `duty.manage-all` |
+| `POST` | `/duty/periods/:id/slots` | Thêm một ô `{dutyDate, roomId, shiftId, roleId, requiredCount?, note?}` | `duty.manage` · `duty.manage-all` |
+| `PUT` | `/duty/slots/:id` | Sửa số người cần, ghi chú (không được thấp hơn số đã xếp) | `duty.manage` · `duty.manage-all` |
+| `POST` | `/duty/slots/:id/delete` | Xoá ô. Ô đang có người trực cần `{force: true, reason}` | `duty.manage` · `duty.manage-all` |
+| `GET` | `/duty/slots/:id/candidates?q=` | Ứng viên kèm kết quả kiểm tra ràng buộc (lỗi, cảnh báo, cùng khoa) | `duty.manage` · `duty.manage-all` |
+| `POST` | `/duty/slots/:id/assignments` | Xếp người trực `{userId, note?, force?, reason?}`. `force` chỉ dành cho `duty.manage-all`, bắt buộc có lý do | `duty.manage` · `duty.manage-all` |
+| `POST` | `/duty/assignments/:id/remove` | Gỡ người trực khỏi ca (kỳ đã chốt không gỡ tại đây) | `duty.manage` · `duty.manage-all` |
+| `POST` | `/duty/slots/:id/register` · `/duty/slots/:id/unregister` | Tự đăng ký ca trống · huỷ ca tự đăng ký (trước giờ trực, kỳ chưa chốt) | `duty.register` |
+| `GET` | `/duty/absences` | Nghỉ phép: người thường chỉ thấy của mình; quản lý lọc theo `from`, `to`, `userId` | `duty.view` |
+| `POST` | `/duty/absences` | Ghi nhận nghỉ phép `{userId?, startDate, endDate, reason, note?}`. Trả về `affected` (ca trực bị ảnh hưởng) và báo người quản lý | `duty.register` |
+| `DELETE` | `/duty/absences/:id` | Xoá ghi nhận nghỉ phép | `duty.register` |
+| `GET` | `/duty/staff?q=` | Danh bạ nhân viên đang hoạt động (họ tên, chức danh, khoa) để chọn người nhận ca | `duty.register` |
+| `GET` | `/duty/me` | Lịch của tôi: ca sắp tới (có `canSelfCancel`, `canRequestSwap`), nghỉ phép, kỳ đang mở | `duty.view` |
+| `GET` | `/duty/requests?box=mine\|incoming\|approval\|all&periodId=` | Hộp yêu cầu, kèm `actions` cho từng dòng | `duty.register` (box `approval`: duyệt tương ứng) |
+| `POST` | `/duty/requests` | Tạo yêu cầu `{type: NHUONG\|DOI\|NGOAI_LE, slotId, targetUserId?, targetSlotId?, replacementUserId?, reason, urgent?}` | `duty.register` |
+| `POST` | `/duty/requests/:id/accept` · `/decline` · `/cancel` | Người nhận đồng ý (có thể chuyển sang chờ duyệt) · từ chối · người tạo huỷ | `duty.register` |
+| `POST` | `/duty/requests/:id/approve` · `/reject` | Duyệt / từ chối. Đổi, nhường ca: cần `duty.swap.approve` đúng khoa. Ngoại lệ: cần `duty.exception.resolve` | `duty.swap.approve` \| `duty.exception.resolve` |
+| `POST` | `/duty/exceptions/override` | Điều chỉnh người trực trực tiếp `{slotId, removeUserId?, addUserId?, reason, force?}`, kể cả sau khi chốt | `duty.exception.resolve` |

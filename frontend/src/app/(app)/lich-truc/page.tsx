@@ -1,0 +1,460 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { CalendarDays, Download, Printer, Settings2, Users } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { AssignDialog, CellDialog, RequestDialog } from "@/components/duty/duty-dialogs";
+import { errorText, KpiTile, PhaseBadge, PhaseBanner, ShiftChip, SourceTag } from "@/components/duty/duty-shared";
+import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody, CardHeader, EmptyState, Skeleton } from "@/components/ui/card";
+import { Select } from "@/components/ui/input";
+import { useRealtimeInvalidate } from "@/lib/realtime";
+import { useAuth } from "@/lib/auth";
+import { bkkTodayYmd, DUTY_KEYS, dutyApi, fmtDate, fmtDm, type GridSlot, type RequestType, weekdayLabel } from "@/lib/duty";
+import { downloadFile } from "@/lib/api";
+
+type CellKey = string;
+const cellKey = (roomId: number, date: string) => `${roomId}|${date}`;
+
+/** Chọn kỳ mặc định: kỳ đang diễn ra hoặc kỳ sắp tới gần nhất (ưu tiên kỳ đã công bố) */
+function pickDefaultPeriod(periods: { id: number; startDate: string; endDate: string; status: string }[]): number | null {
+  if (!periods.length) return null;
+  const today = bkkTodayYmd();
+  const visible = periods.filter((p) => p.status !== "NHAP");
+  const pool = visible.length ? visible : periods;
+  const current = pool.find((p) => p.startDate <= today && p.endDate >= today);
+  if (current) return current.id;
+  const upcoming = [...pool].filter((p) => p.startDate > today).sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+  return (upcoming ?? [...pool].sort((a, b) => b.startDate.localeCompare(a.startDate))[0]).id;
+}
+
+/** Nội dung một ô phòng × ngày: các ca và người trực */
+function CellPreview({ slots, meId }: { slots: GridSlot[]; meId: number }) {
+  if (!slots.length) return <span className="text-xs text-[var(--muted-foreground)]/60">—</span>;
+  return (
+    <div className="space-y-1">
+      {slots.map((s) => {
+        const mine = s.assignments.some((a) => a.userId === meId);
+        const short = s.filled < s.requiredCount;
+        const names = s.assignments.map((a) => a.fullName).join(", ");
+        return (
+          <div
+            key={s.id}
+            className={`flex items-start gap-1.5 rounded-md px-1.5 py-1 ${mine ? "bg-[var(--accent)] ring-1 ring-[var(--primary)]/40" : "bg-[var(--muted)]/50"}`}
+          >
+            <ShiftChip code={s.shiftCode} color={s.shiftColor} className="mt-px" />
+            <div className="min-w-0 flex-1 text-[11.5px] leading-snug">
+              <div className="truncate" title={names}>
+                {names || <span className="font-medium text-amber-600 dark:text-amber-400">Chưa có người</span>}
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-[var(--muted-foreground)]">
+                <span>{s.roleName}</span>
+                <span>·</span>
+                <span className={short ? "font-semibold text-amber-600 dark:text-amber-400" : ""}>
+                  {s.filled}/{s.requiredCount}
+                </span>
+                {s.past ? <span>· đã qua</span> : null}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function LichTrucPage() {
+  const can = useAuth((s) => s.can);
+  const [periodId, setPeriodId] = useState<number | null>(null);
+  const [roomFilter, setRoomFilter] = useState<string>("ALL");
+  const [cell, setCell] = useState<{ key: CellKey; title: string; subtitle: string } | null>(null);
+  const [assignSlotId, setAssignSlotId] = useState<number | null>(null);
+  const [request, setRequest] = useState<{ mode: RequestType; slotId: number } | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const canView = can("duty.view");
+  const periods = useQuery({ queryKey: DUTY_KEYS.periods, queryFn: () => dutyApi.periods(), enabled: canView });
+  useEffect(() => {
+    if (periodId === null && periods.data?.length) setPeriodId(pickDefaultPeriod(periods.data));
+  }, [periods.data, periodId]);
+
+  const grid = useQuery({
+    queryKey: DUTY_KEYS.grid(periodId ?? 0),
+    queryFn: () => dutyApi.grid(periodId as number),
+    enabled: canView && !!periodId,
+  });
+  const g = grid.data;
+  const canRegister = !!g?.viewer.canRegister && !g.period.locked && g.period.status !== "NHAP";
+  const myOpts = useQuery({
+    queryKey: DUTY_KEYS.myOptions(periodId ?? 0),
+    queryFn: () => dutyApi.myOptions(periodId as number),
+    enabled: canRegister,
+  });
+
+  useRealtimeInvalidate({
+    duty: [["duty-grid"], ["duty-periods"], ["duty-options"], ["duty-me"], ["duty-requests"], ["duty-candidates"]],
+  });
+
+  const slotsByCell = useMemo(() => {
+    const m = new Map<CellKey, GridSlot[]>();
+    for (const s of g?.slots ?? []) {
+      const k = cellKey(s.roomId, s.dutyDate);
+      const list = m.get(k) ?? [];
+      list.push(s);
+      m.set(k, list);
+    }
+    for (const list of m.values()) list.sort((a, b) => a.start - b.start || a.roleName.localeCompare(b.roleName, "vi"));
+    return m;
+  }, [g]);
+
+  const rooms = useMemo(() => (g?.rooms ?? []).filter((r) => roomFilter === "ALL" || String(r.id) === roomFilter), [g, roomFilter]);
+  const myOptMap = useMemo(() => new Map((myOpts.data?.items ?? []).map((i) => [i.slotId, i])), [myOpts.data]);
+  const mySlots = useMemo(() => (g?.slots ?? []).filter((s) => g?.viewer.mySlotIds.includes(s.id) && !s.past), [g]);
+  const assignSlot = useMemo(() => g?.slots.find((s) => s.id === assignSlotId) ?? null, [g, assignSlotId]);
+  const today = bkkTodayYmd();
+
+  const openCell = (roomId: number, date: string) => {
+    if (!g) return;
+    const room = g.rooms.find((r) => r.id === roomId);
+    const day = g.days.find((d) => d.date === date);
+    setCell({
+      key: cellKey(roomId, date),
+      title: `${room?.code ?? ""} · ${day?.label ?? ""} ${fmtDate(date)}`,
+      subtitle: `${room?.name ?? ""}${day?.closed ? ` · Nghỉ: ${day.closedName}` : ""}`,
+    });
+  };
+
+  const onExport = async () => {
+    if (!periodId || !g) return;
+    setExporting(true);
+    try {
+      await downloadFile(dutyApi.exportPath(periodId), `lich-truc-${g.period.startDate}_${g.period.endDate}.xlsx`);
+    } catch (e) {
+      toast.error(errorText(e));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  if (!canView) {
+    return <EmptyState title="Bạn chưa có quyền xem lịch trực" description="Liên hệ Khoa Kế hoạch tổng hợp để được cấp quyền." />;
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Lịch trực khám bệnh"
+        description="Lịch trực theo tuần: phòng khám × ngày × ca. Nhân viên xem và đăng ký ca; quản lý phân công và theo dõi thiếu người."
+        actions={
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            <Select
+              className="h-9 min-w-[16rem]"
+              aria-label="Chọn kỳ lịch"
+              value={periodId ? String(periodId) : ""}
+              onChange={(e) => {
+                setPeriodId(e.target.value ? Number(e.target.value) : null);
+                setRoomFilter("ALL");
+              }}
+            >
+              {(periods.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({fmtDm(p.startDate)}–{fmtDm(p.endDate)})
+                </option>
+              ))}
+            </Select>
+            {g?.viewer.canExport ? (
+              <Button variant="outline" onClick={onExport} disabled={exporting}>
+                <Download className="h-4 w-4" /> Xuất Excel
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer className="h-4 w-4" /> In
+            </Button>
+            {can("duty.period.manage") ? (
+              <Link href="/lich-truc/ky-lich">
+                <Button variant="outline">
+                  <Settings2 className="h-4 w-4" /> Kỳ lịch
+                </Button>
+              </Link>
+            ) : null}
+          </div>
+        }
+      />
+
+      {periods.isLoading || (periodId && grid.isLoading) ? (
+        <div className="space-y-4">
+          <Skeleton className="h-16 w-full" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-24" />
+            ))}
+          </div>
+          <Skeleton className="h-96 w-full" />
+        </div>
+      ) : null}
+
+      {!periods.isLoading && !periods.data?.length ? (
+        <EmptyState
+          title="Chưa có kỳ lịch trực"
+          description={can("duty.period.manage") ? "Tạo kỳ lịch tuần đầu tiên để bắt đầu lập lịch trực." : "Lịch trực sẽ hiển thị khi kỳ lịch được công bố."}
+          action={
+            can("duty.period.manage") ? (
+              <Link href="/lich-truc/ky-lich">
+                <Button>Tạo kỳ lịch</Button>
+              </Link>
+            ) : undefined
+          }
+        />
+      ) : null}
+
+      {g ? (
+        <div className="space-y-4">
+          <PhaseBanner period={g.period} canManage={g.viewer.canManage} />
+
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiTile label="Ca trực trong tuần" value={g.summary.slots} hint={`${g.days.filter((d) => !d.closed).length} ngày làm việc`} />
+            <KpiTile label="Người trực" value={g.summary.people} hint="Số nhân viên được xếp" tone="info" />
+            <KpiTile
+              label="Đã đủ người"
+              value={`${g.summary.required ? Math.round((Math.min(g.summary.filled, g.summary.required) / g.summary.required) * 100) : 0}%`}
+              hint={`${g.summary.filled}/${g.summary.required} vị trí`}
+              tone="success"
+            />
+            <KpiTile
+              label="Còn thiếu người"
+              value={g.summary.missing}
+              hint={g.summary.missing ? "Ô chưa đủ người trực" : "Không có ô thiếu"}
+              tone={g.summary.missing ? "warning" : "default"}
+            />
+          </div>
+
+          <Card>
+            <CardHeader
+              title={
+                <span className="flex flex-wrap items-center gap-2">
+                  <CalendarDays className="h-4 w-4 text-[var(--primary)]" /> Lịch tuần {fmtDate(g.period.startDate)} – {fmtDate(g.period.endDate)}
+                  <PhaseBadge period={g.period} />
+                </span>
+              }
+              description={
+                <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {g.shifts.map((s) => (
+                    <span key={s.id} className="inline-flex items-center gap-1.5">
+                      <ShiftChip code={s.code} color={s.color} />
+                      <span>
+                        {s.name} ({s.startTime}–{s.endTime})
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              }
+              actions={
+                <Select className="h-8 w-44 text-xs print:hidden" aria-label="Lọc theo phòng" value={roomFilter} onChange={(e) => setRoomFilter(e.target.value)}>
+                  <option value="ALL">Tất cả phòng</option>
+                  {g.rooms.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.code} — {r.name}
+                    </option>
+                  ))}
+                </Select>
+              }
+            />
+            <CardBody className="p-0">
+              {/* Lưới trên màn hình rộng */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
+                  <thead>
+                    <tr>
+                      <th className="sticky left-0 z-10 w-28 border-b bg-[var(--card)] px-3 py-2.5 text-left text-xs font-semibold text-[var(--muted-foreground)]">
+                        Phòng khám
+                      </th>
+                      {g.days.map((d) => (
+                        <th
+                          key={d.date}
+                          className={`border-b border-l px-2 py-2 text-center ${d.date === today ? "bg-[var(--accent)]" : "bg-[var(--card)]"} ${d.closed ? "bg-[var(--muted)]" : ""}`}
+                        >
+                          <div className="text-xs font-semibold">{d.label}</div>
+                          <div className="text-[11px] text-[var(--muted-foreground)]">{fmtDm(d.date)}</div>
+                          {d.closed ? (
+                            <div className="mt-0.5 truncate text-[10px] font-medium text-rose-600" title={d.closedName}>
+                              Nghỉ · {d.closedName}
+                            </div>
+                          ) : null}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rooms.map((r) => (
+                      <tr key={r.id}>
+                        <td className="sticky left-0 z-10 border-b bg-[var(--card)] px-3 py-2 align-top">
+                          <div className="font-semibold">{r.code}</div>
+                          <div className="line-clamp-2 text-[11px] text-[var(--muted-foreground)]">{r.name}</div>
+                        </td>
+                        {g.days.map((d) => {
+                          const list = slotsByCell.get(cellKey(r.id, d.date)) ?? [];
+                          return (
+                            <td
+                              key={d.date}
+                              onClick={() => list.length && openCell(r.id, d.date)}
+                              className={`border-b border-l p-1.5 align-top transition-colors ${d.closed ? "bg-[var(--muted)]/60" : ""} ${list.length ? "cursor-pointer hover:bg-[var(--accent)]/60" : ""} ${d.date === today ? "bg-[var(--accent)]/30" : ""}`}
+                              style={{ minWidth: 120 }}
+                            >
+                              <CellPreview slots={list} meId={g.viewer.userId} />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                    {rooms.length === 0 ? (
+                      <tr>
+                        <td colSpan={g.days.length + 1} className="px-4 py-10 text-center text-sm text-[var(--muted-foreground)]">
+                          Kỳ lịch chưa có ô trực. {can("duty.manage") ? "Vào Kỳ lịch để sinh ô trực." : ""}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Danh sách theo ngày trên điện thoại / máy tính bảng */}
+              <div className="divide-y md:hidden">
+                {g.days.map((d) => {
+                  const rowsOfDay = rooms.filter((r) => (slotsByCell.get(cellKey(r.id, d.date)) ?? []).length > 0);
+                  return (
+                    <section key={d.date} className={`px-3 py-3 ${d.date === today ? "bg-[var(--accent)]/40" : ""}`}>
+                      <header className="mb-2 flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold">
+                            {d.label} <span className="font-normal text-[var(--muted-foreground)]">{fmtDate(d.date)}</span>
+                          </div>
+                          {d.closed ? <div className="text-xs text-rose-600">Nghỉ · {d.closedName}</div> : null}
+                        </div>
+                        {d.date === today ? (
+                          <span className="rounded-full bg-[var(--primary)] px-2 py-0.5 text-[10px] font-semibold text-[var(--primary-foreground)]">Hôm nay</span>
+                        ) : null}
+                      </header>
+                      {rowsOfDay.length === 0 ? (
+                        <p className="text-xs text-[var(--muted-foreground)]">{d.closed ? "Không có ca trực." : "Chưa có ca trực."}</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {rowsOfDay.map((r) => {
+                            const list = slotsByCell.get(cellKey(r.id, d.date)) ?? [];
+                            return (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => openCell(r.id, d.date)}
+                                className="w-full rounded-xl border bg-[var(--card)] p-2.5 text-left shadow-sm active:scale-[0.99]"
+                              >
+                                <div className="mb-1.5 text-sm font-semibold">
+                                  {r.code} <span className="font-normal text-[var(--muted-foreground)]">· {r.name}</span>
+                                </div>
+                                <CellPreview slots={list} meId={g.viewer.userId} />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Ca của tôi trong kỳ */}
+          {mySlots.length > 0 ? (
+            <Card>
+              <CardHeader title="Ca của bạn trong kỳ này" description="Bấm để nhường hoặc đổi ca" />
+              <CardBody>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {mySlots.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between gap-3 rounded-lg border p-2.5">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <ShiftChip code={s.shiftCode} color={s.shiftColor} />
+                        <div className="min-w-0 text-sm">
+                          <div className="font-medium">
+                            {weekdayLabel(new Date(`${s.dutyDate}T00:00:00Z`).getUTCDay() || 7)} · {fmtDate(s.dutyDate)}
+                          </div>
+                          <div className="truncate text-xs text-[var(--muted-foreground)]">
+                            {s.roomCode} · {s.startTime}–{s.endTime} · {s.roleName}
+                            <SourceTag source={s.assignments.find((a) => a.userId === g.viewer.userId)?.source ?? ""} />
+                          </div>
+                        </div>
+                      </div>
+                      {!g.period.locked ? (
+                        <Button size="sm" variant="outline" onClick={() => setRequest({ mode: "NHUONG", slotId: s.id })}>
+                          Nhường / đổi
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="ghost" onClick={() => setRequest({ mode: "NGOAI_LE", slotId: s.id })}>
+                          Ngoại lệ
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
+          ) : null}
+
+          {g.viewer.canManage && g.summary.missing > 0 ? (
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100 print:hidden">
+              <Users className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                Còn <b>{g.summary.missing}</b> ô chưa đủ người trực. Bấm vào ô trên lưới để xếp thêm người.
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Chi tiết một ô phòng × ngày */}
+      {g && cell ? (
+        <CellDialog
+          open={!!cell}
+          onClose={() => setCell(null)}
+          title={cell.title}
+          subtitle={cell.subtitle}
+          slots={slotsByCell.get(cell.key) ?? []}
+          grid={g}
+          myOptions={myOptMap}
+          onAssign={(s) => {
+            setCell(null);
+            setAssignSlotId(s.id);
+          }}
+          onRequest={(s, mode) => {
+            setCell(null);
+            setRequest({ mode, slotId: s.id });
+          }}
+        />
+      ) : null}
+
+      {g ? (
+        <AssignDialog
+          open={!!assignSlot}
+          onClose={() => setAssignSlotId(null)}
+          slot={assignSlot}
+          canManageAll={g.viewer.canManageAll}
+          locked={g.period.locked}
+        />
+      ) : null}
+
+      {g && request ? (
+        <RequestDialog
+          key={`${request.mode}-${request.slotId}`}
+          open={!!request}
+          onClose={() => setRequest(null)}
+          mode={request.mode}
+          initialSlotId={request.slotId}
+          slotChoices={mySlots.map((s) => ({ id: s.id, label: `${fmtDm(s.dutyDate)} · ${s.roomCode} · ${s.shiftCode} · ${s.roleName}` }))}
+          grid={g}
+        />
+      ) : null}
+    </>
+  );
+}

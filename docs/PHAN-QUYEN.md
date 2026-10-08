@@ -164,3 +164,33 @@ Script chỉ đụng vào **vai trò hệ thống**; vai trò do đơn vị tự
 cd backend && npx tsx -e " /* xem state.md §5 hoặc lịch sử git để lấy lệnh sinh */ "
 ```
 
+
+
+## 8. Lịch trực khám bệnh (`duty.*`)
+
+Chín quyền và hai vai trò mới (tạo bởi migration `0015_lich_truc.sql` và seed; mục 3–4 sẽ được sinh lại theo seed ở lần tái sinh tiếp theo).
+
+| Quyền | Ý nghĩa | Vai trò mặc định |
+|---|---|---|
+| `duty.view` | Xem lịch trực đã công bố, danh mục, lưới lịch | Mọi vai trò trực, `LANH_DAO`, `ADMIN` |
+| `duty.register` | Tự đăng ký ca trống, nhường/đổi ca, báo nghỉ, báo sự cố của chính mình | `NHAN_VIEN_TRUC`, `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
+| `duty.manage` | Sinh ô, xếp và gỡ người trực **trong khoa được giao** | `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
+| `duty.manage-all` | Xếp trực mọi phòng khám; bỏ qua ràng buộc khi có lý do | `KHTB`, `DIEU_PHOI_TRUC` |
+| `duty.period.manage` | Tạo, cấu hình, công bố, chốt sớm, mở chốt kỳ lịch | `KHTB`, `DIEU_PHOI_TRUC` |
+| `duty.catalog.manage` | Danh mục phòng khám, ca trực, vai trò trực, ngày nghỉ | `ADMIN`, `DIEU_PHOI_TRUC` |
+| `duty.swap.approve` | Duyệt đổi/nhường ca trước khi chốt (**trong khoa**) | `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
+| `duty.exception.resolve` | Duyệt ngoại lệ sau khi chốt; điều chỉnh người trực trực tiếp (**tài khoản đổi trực của KHTH**) | `KHTB`, `DIEU_PHOI_TRUC` |
+| `duty.export` | Xuất Excel lịch và bảng giờ trực | `KHTB`, `TRUONG_KHOA`, `DIEU_PHOI_TRUC` |
+
+**Hai vai trò mới**
+
+- `DIEU_PHOI_TRUC` — *Điều phối lịch trực (KHTH)*. Phạm vi toàn viện, 9 quyền. Đây là **tài khoản đổi trực** để xử lý ngoại lệ và điều chỉnh khẩn.
+- `NHAN_VIEN_TRUC` — *Nhân viên trực khám*. Phạm vi cá nhân, 2 quyền (`duty.view`, `duty.register`). Gán cho bác sĩ, điều dưỡng tham gia trực.
+
+**Quy tắc phạm vi**
+
+- `duty.manage` và `duty.swap.approve` chỉ áp dụng cho phòng thuộc khoa được giao (`user_department_scopes`). Phòng chưa gắn khoa chỉ người có `duty.manage-all` xếp được.
+- `duty.exception.resolve` là quyền toàn viện. Mỗi lần dùng đều ghi nhật ký kèm lý do.
+- Bỏ qua ràng buộc khi xếp người (`force`) chỉ dành cho `duty.manage-all` và bắt buộc ghi lý do.
+- Bản nháp kỳ lịch và nhật ký thay đổi chỉ người quản lý (`duty.manage` hoặc `duty.manage-all`) thấy.
+- Danh bạ nhân viên (`/duty/staff`) chỉ hiển thị họ tên, chức danh, khoa của người đang hoạt động, cho người có `duty.register`.

@@ -224,3 +224,33 @@ frontend/
 docs/              # tài liệu dự án
 docker-compose.yml # PostgreSQL + Redis + API + Web
 ```
+
+
+## 8. Phân hệ Lịch trực khám bệnh
+
+**Mô hình.** Kỳ lịch (thường một tuần, Thứ 2 → Thứ 7) → ô trực (ngày × phòng × ca × vai trò, kèm số người cần) → phân công. Danh mục phòng, ca, vai trò và ngày nghỉ cấu hình được. Bảng: `duty_rooms`, `duty_shift_types`, `duty_roles`, `duty_closed_days`, `duty_periods`, `duty_slots`, `duty_assignments`, `duty_absences`, `duty_requests`, `duty_logs` (migration `0015_lich_truc.sql`, schema `backend/src/db/schema/duty.ts`).
+
+**Lõi nghiệp vụ thuần** — `backend/src/modules/duty/duty-rules.ts`, không truy vấn CSDL, có kiểm thử `backend/test/duty-rules.test.ts` (`npm test`).
+
+- Mọi mốc thời gian quy về mili-giây UTC theo múi giờ cố định Asia/Bangkok (+07:00, không có giờ mùa hè). Ca qua đêm cộng thêm 24 giờ.
+- Ràng buộc **chặn**: trùng giờ; nghỉ giữa hai ca dưới mức tối thiểu (`minRestHours`, mặc định 12 giờ); ca đêm liền kề ca khác; số ca và giờ trực trong ngày; giờ trực trong tuần ISO (mặc định ≤48, theo BLLĐ 2019 Điều 105); số ca và ca đêm trong kỳ; đang nghỉ phép; sai chức danh; ô đã đủ người; đã có trong ô; ca đã qua; kỳ đã chốt; tài khoản ngừng hoạt động; lý do chặn đăng ký.
+- Ràng buộc **cảnh báo** (cấu hình được): khác khoa với phòng, `crossDeptPolicy` = `CHO_PHEP` | `CANH_BAO` | `CHAN`.
+- Ca sáng và ca chiều liền nhau trong cùng ngày được phép, theo mẫu lịch thật của phòng khám. Ca đêm (có từ 2 giờ trở lên trong khung 22:00–06:00, BLLĐ Điều 106) luôn cần khoảng nghỉ.
+- Cấu hình ràng buộc lưu theo từng kỳ (`duty_periods.rules`, JSON), chuẩn hoá bởi `normalizeRules` (thiếu thì lấy mặc định, vượt biên thì kẹp về biên).
+
+**Đồng thời và toàn vẹn dữ liệu.** Mọi thao tác ghi phân công chạy trong transaction, khoá ô bằng `SELECT … FOR UPDATE`, rồi khoá từng người bằng `pg_advisory_xact_lock(9301, userId)`, luôn theo thứ tự id tăng dần để tránh deadlock. Ràng buộc duy nhất ở CSDL: `(slot_id, user_id)` và `(period_id, duty_date, room_id, shift_id, role_id)`. Luôn truyền `tx` vào các hàm bên trong transaction.
+
+**Chốt lịch.** Trạng thái lưu là `NHAP` · `CONG_BO` · `DA_CHOT`. Trạng thái hiệu lực (`phase`) tính theo `lock_at`, nên đến mốc chốt kỳ tự khoá mà không cần tác vụ định kỳ. Mở chốt bắt buộc lý do và mốc mới ở tương lai.
+
+**Luồng đổi trực.**
+
+- NHUONG / DOI trước chốt: người nhận đồng ý; nếu `swapNeedsApproval` thì chờ Trưởng khoa hoặc Điều phối duyệt theo khoa; không thì thực hiện ngay.
+- Khi duyệt, hệ thống kiểm tra lại ràng buộc với dữ liệu mới nhất. Nếu không còn hợp lệ, yêu cầu chuyển sang `TU_CHOI` kèm lý do.
+- Sau chốt: chỉ NGOAI_LE (gửi tài khoản đổi trực) hoặc điều chỉnh trực tiếp `POST /duty/exceptions/override`.
+- Ca do quản lý phân công (`PHAN_CONG`) không tự huỷ được; phải đi qua yêu cầu nhường ca.
+
+**Thông báo, realtime, nhật ký.** Thông báo gửi sau khi giao dịch đã commit (`notifyAfterCommit`), nên lỗi gửi thông báo không làm hỏng nghiệp vụ. Realtime topic `duty` phát khi có thay đổi; giao diện làm mới bằng `useRealtimeInvalidate`. Nhật ký `duty_logs` ghi mã hành động (`PERIOD_CREATE`, `PUBLISH`, `LOCK`, `UNLOCK`, `SLOTS_GENERATE`, `ASSIGN`, `UNASSIGN`, `SELF_REGISTER`, `SWAP`, `HANDOVER`, `EXCEPTION`, `OVERRIDE`, `ABSENCE`, `EXPORT`…), lý do và chi tiết vi phạm đã bỏ qua (JSON).
+
+**Giao diện.** `frontend/src/app/(app)/lich-truc/` gồm `/lich-truc` (lưới tuần; trên điện thoại hiển thị theo ngày), `ky-lich`, `cua-toi`, `yeu-cau`, `danh-muc`. Thành phần dùng chung trong `frontend/src/components/duty/`, lớp dữ liệu và kiểu trong `frontend/src/lib/duty.ts`.
+
+**Điểm tích hợp giai đoạn 2 (chưa làm).** Cần một endpoint trả lời "ai đang trực phòng X tại thời điểm T" cho máy phòng bác sĩ, dựa trên `duty_assignments` ⋈ `duty_slots` ⋈ `duty_shift_types`.
