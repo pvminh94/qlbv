@@ -93,6 +93,7 @@
 | — | HSBA: bỏ ô "Số tiền liên quan" và "Tài liệu kèm theo" khỏi form phiếu | 986e204 |
 | 14 | **Lịch trực khám bệnh**: kỳ lịch tuần, ô trực, ràng buộc (nghỉ tối thiểu, giờ/ngày, giờ/tuần, chức danh, nghỉ phép, khác khoa), tự đăng ký, nhường/đổi, ngoại lệ gửi KHTH, điều chỉnh trực tiếp, chốt theo mốc, nhật ký, Excel, thông báo và realtime | (commit này) |
 | 14b | **Lịch trực — siết chặt, xoá cả kỳ, bảng màu ca, giao diện ngọc lam**: xoá cả kỳ lịch có kiểm soát (lý do, gõ lại tên, chặn khi đã có ca đã diễn ra, nhật ký giữ lại, báo người bị ảnh hưởng); bảng màu ca; ràng buộc chặt hơn (không trùng kỳ, ngày nghỉ, ca/vai trò đang dùng, nghỉ phép); tổng hợp giờ và nhật ký chỉ quản lý; migration 0016–0017 | (commit kế tiếp, sau 3deb70b) |
+| 15 | **API tích hợp lịch trực cho máy khoá phòng khám**: khoá API chỉ đọc (`integration_keys`, migration `0018`, CLI `npm run integration:key -- create/list/revoke`), `GET /api/integration/duty/{on-duty,roster,rooms}` (chuẩn `{success,data}`; chỉ kỳ `CONG_BO`/`DA_CHOT`; loại người đã vô hiệu hoá, phòng đã đóng, người nghỉ phép; ca đêm qua nửa đêm), phạm vi `duty:read`, `INTEGRATION_ALLOWED_IPS`, từ điển dữ liệu | commit cục bộ, **chưa push** (xem mục 6) |
 
 Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-label].json.gz` v2.
 
@@ -119,7 +120,35 @@ Sao lưu: job `BACKUP_HANG_NGAY` 23:30, giữ 14 bản, tệp `qlbs-<stamp>[-lab
 - Giao diện: bảng màu `frontend/src/components/shared/color-picker.tsx` (kiểu `color` của CrudTable, `SHIFT_PALETTE` trong `lib/duty.ts`); hộp thoại `components/duty/delete-period-dialog.tsx`; lớp chủ đề `.duty-theme` (layout `/lich-truc`) trong `globals.css`.
 - Kiểm thử: `node .ai/examples/duty-api-test.mjs` (API :4000, 94 kiểm tra, tự dọn dữ liệu kiểm thử sót, chạy lặp được) và `.ai/examples/duty-ui-test.mjs` (Playwright, chụp ảnh `/tmp/shots`, kiểm tra quyền hiển thị, bảng màu không tràn, hộp thoại xoá; báo lỗi console).
 
+### Tích hợp máy khoá phòng khám (Yêu cầu 15)
+- Module `backend/src/modules/integration/`: `integration-key.guard.ts` (`Authorization: Bearer qlbs_int_…`, so khớp băm SHA-256, `@RequireIntegrationScope`, `INTEGRATION_ALLOWED_IPS`), `integration-duty.service.ts` (truy vấn lịch; không lọc cờ `active` của ca; nghỉ phép giao từ ngày trực đến ngày kết thúc ca), `integration-time.ts` (đọc `at`: không múi giờ = Bangkok; ngày ứng viên = hôm nay và hôm trước; phủ ca nửa mở), `integration.controller.ts` (`@Public()` + guard khoá, không dùng JWT), `integration-keys.ts` (sinh và băm khoá).
+- CSDL: bảng `integration_keys` trong `backend/src/db/schema/integration.ts`; migration `drizzle/0018_tich_hop_lich_truc.sql` (không có trong `_journal.json`, giống 0015–0017); mô tả trong `schema-comments.ts`.
+- CLI: `backend/scripts/integration-key.ts`, chạy bằng `npm run integration:key -- …`. Khoá đầy đủ chỉ in một lần.
+- Phía máy khoá (thư mục `/home/user/phongkham-unlock/`, không phải git): `server/qlbs_client.py` (HTTPS, thời gian chờ, lỗi là từ chối), `UNLOCK_SCHEDULE_SOURCE=csv|qlbs`, `admin.py link-doctor/link-room/qlbs-check/qlbs-roster`, `tests/test_qlbs.py`.
+- Kiểm thử: `npm test` 29/29; `node .ai/examples/integration-api-test.mjs` 51/51; `duty-api-test.mjs` 94/94; `duty-ui-test.mjs` 7/7.
+
+
 ## 6. Việc đang mở / đề xuất
+### Yêu cầu 15 (lượt này): API lịch trực cho máy khoá phòng khám
+Nguyên văn (tóm): "Giờ đã có lịch trực bác sĩ trên VPS. Lấy nó làm API để lấy danh sách lịch trực cho ứng dụng khoá màn hình phòng khám (codebase `/home/user/phongkham-unlock/`, cài trên VPS khác), để giải quyết vấn đề ban đầu."
+
+**Đã làm:**
+- QLBS: API chỉ đọc `GET /api/integration/duty/on-duty?room=&at=`, `/roster?from=&to=&room=`, `/rooms`; khoá API `qlbs_int_…` (băm SHA-256, phạm vi `duty:read`, thu hồi); `INTEGRATION_ALLOWED_IPS` tuỳ chọn; migration 0018; từ điển dữ liệu; tài liệu `docs/API.md` (mục "Tích hợp máy khoá phòng khám").
+- Máy khoá: nguồn `qlbs` (`UNLOCK_SCHEDULE_SOURCE`, `UNLOCK_QLBS_URL/KEY/TIMEOUT/CAFILE`); mọi quyết định (tạo yêu cầu, hiện tuỳ chọn, nhận chữ ký) hỏi QLBS tại thời điểm đó; lỗi hoặc hết giờ là từ chối (503 `schedule_unavailable`); cột `doctors.qlbs_username` và `rooms.qlbs_room_code` (tự nâng cấp CSDL cũ); lệnh `admin.py link-doctor`, `link-room`, `qlbs-check`, `qlbs-roster`; `import-schedule` và `assign` bị khoá khi nguồn là QLBS; README mục 4A.
+
+**Kiểm thử đã chạy:** `npm test` 29/29 (backend); `integration-api-test.mjs` 51/51; `duty-api-test.mjs` 94/94; `duty-ui-test.mjs` 7/7; máy khoá `unittest` 59/59; kiểm chứng chéo với API QLBS đang chạy 28/28 (đúng người được mở, người chưa liên kết bị chặn, ca đã hết không mở, khoá sai/đã thu hồi bị từ chối, khoá không lộ trong nhật ký, lệnh CLI hoạt động). Kịch bản chéo: `/home/user/phongkham-unlock/tests/kiem_chung_qlbs.py` (cần `QLBS_ADMIN_PASS`, `QLBS_BACKEND_DIR`; chỉ chạy trên môi trường thử). Thực nghiệm IP: gọi qua web (Next, :3000) và trực tiếp (:4000) cho kết quả giống nhau.
+
+**Lỗi đã gặp và sửa:** (1) lọc `duty_shift_types.active` làm mất phân công ca đêm đã công bố (ca `D` đang tắt trong seed): đã bỏ lọc theo ca, có kiểm thử; (2) client Python không đọc khung `{success,data}` của QLBS: đã sửa và có test.
+
+**Quyết định cần người dùng biết:** ca đã tắt trong danh mục vẫn được tính nếu đã công bố/chốt; phòng đã đóng và nhân sự đã vô hiệu hoá bị loại; nghỉ phép giao với ngày trực hoặc ngày kết thúc ca thì loại khỏi `on-duty`; `at` không ghi múi giờ là giờ Bangkok; `roster` tối đa 31 ngày.
+
+**Chưa làm / lưu ý:**
+- **Đã push** lên `origin/main` (2026-10-09). Bản vá dự phòng: `/home/user/patches/0002-yeu-cau-15-tich-hop-lich-truc.patch`.
+- VPS chưa cập nhật. Sau khi push: `cd /opt/qlbs && sudo bash deploy/update.sh --backup` (migration 0018 chạy khi container khởi động).
+- Trên VPS QLBS: tạo khoá (`npm run integration:key -- create --name "Máy khóa phòng khám"`), đặt `INTEGRATION_ALLOWED_IPS` bằng IP công khai của máy khoá (tuỳ chọn, nên có).
+- Chưa thử trên Windows và trên điện thoại thật; chưa thử với HTTPS thật của bệnh viện.
+
+
 
 ### Yêu cầu 14b (lượt này): siết ràng buộc, xoá cả kỳ lịch, bảng màu ca, giao diện ngọc lam
 Nguyên văn (tóm): người dùng đồng ý phương án đề xuất (nhân viên thường chỉ đăng ký/nhường/đổi ca của mình; tổng hợp giờ và trang quản lý chỉ người quản lý); chọn màu ca bằng bảng màu thay vì gõ mã; cho xoá cả kỳ lịch (trước đây chỉ xoá được kỳ nháp rỗng); tối ưu ràng buộc và logic cho chặt chẽ; giao diện tông màu tươi mát, phù hợp y khoa.
@@ -154,6 +183,8 @@ Nguyên văn (tóm): đọc STATE và codebase `pvminh94/qlbv`; viết trang "l�
 - Giai đoạn 2 (chưa bắt đầu): máy chủ sinh trắc học (khuôn mặt…), dashboard quản lý máy chủ, app tại máy phòng bác sĩ. Điểm tích hợp đã định: "ai đang trực phòng X tại thời điểm T" từ `duty_assignments` ⋈ `duty_slots` ⋈ `duty_shift_types`.
 
 ### Việc chờ người dùng
+- **Yêu cầu 15 — cần token GitHub mới để push** (commit cục bộ, bản vá `/home/user/patches/0002-yeu-cau-15-tich-hop-lich-truc.patch`). Sau khi push: `cd /opt/qlbs && sudo bash deploy/update.sh --backup`.
+- **Dự án máy khoá — thông tin cần cho lần triển khai:** tên miền HTTPS của QLBS (đường dẫn API), IP công khai của VPS máy khoá, mã phòng QLBS nếu khác mã phòng bên máy khoá, `username` QLBS của từng bác sĩ. Câu hỏi (a)–(i) vẫn chưa trả lời.
 - **Cập nhật VPS**: commit đã push lên `main`; VPS chưa cập nhật. Chạy `cd /opt/qlbs && sudo bash deploy/update.sh --backup` (migration 0015–0017 chạy khi container khởi động).
 - **Thu hồi GitHub token**: token dùng để push phiên này đã được dán trong chat, nên cần thu hồi. Token không được lưu trong sandbox, git remote hay repo.
 - **Chính sách xoá kỳ đã có ca**: hiện chặn (409) nếu có phân công có ngày ≤ hôm nay (giờ Bangkok). Chờ người dùng quyết định có cho phép xoá không và điều kiện.

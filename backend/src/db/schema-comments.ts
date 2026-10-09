@@ -9,6 +9,7 @@
 
 /** Ghi chú theo TỪNG BẢNG */
 export const TABLE_COMMENTS: Record<string, string> = {
+  'integration_keys': 'Khoá API cho máy hệ thống (chỉ đọc lịch trực). Chỉ lưu băm, có thể thu hồi',
   'departments': 'Cây đơn vị tổ chức của viện (Viện → Khối → Khoa → Phòng/Ban/Tổ), hỗ trợ nhiều cấp không giới hạn',
   'job_titles': 'Danh mục chức danh (bác sĩ, điều dưỡng trưởng…) dùng khi khai báo người dùng/chữ ký',
   'users': 'Tài khoản người dùng hệ thống',
@@ -73,6 +74,16 @@ export const TABLE_COMMENTS: Record<string, string> = {
 
 /** Ghi chú theo TỪNG CỘT của bảng (ưu tiên cao hơn COLUMN_COMMENTS_COMMON) */
 export const COLUMN_COMMENTS: Record<string, Record<string, string>> = {
+  'integration_keys': {
+    'name': 'Tên gợi nhớ của khoá (ví dụ: Máy khóa phòng khám)',
+    'key_prefix': '14 ký tự đầu của khoá để nhận diện (không đủ để giả mạo)',
+    'key_hash': 'Băm SHA-256 của khoá đầy đủ (không lưu khoá gốc)',
+    'scope': 'Phạm vi quyền của khoá (duty:read = đọc lịch trực)',
+    'created_at': 'Thời điểm tạo khoá',
+    'last_used_at': 'Lần cuối khoá được dùng thành công',
+    'use_count': 'Số lần khoá đã được chấp nhận',
+    'revoked_at': 'Thời điểm thu hồi (có giá trị thì khoá bị từ chối ngay)',
+  },
   'asset_transactions': {
     'supplier_id': 'Nhà cung cấp liên quan (ghi tăng mua mới)',
     'type': 'Loại chứng từ: ghi tăng/giảm, điều chuyển, cấp phát, thu hồi, thanh lý, sửa chữa…',

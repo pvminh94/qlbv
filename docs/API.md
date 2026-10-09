@@ -380,3 +380,74 @@ Tiền tố `/api/duty`. Ngày dạng `YYYY-MM-DD`; thời điểm dạng ISO 86
 | `POST` | `/duty/requests/:id/accept` · `/decline` · `/cancel` | Người nhận đồng ý (có thể chuyển sang chờ duyệt) · từ chối · người tạo huỷ | `duty.register` |
 | `POST` | `/duty/requests/:id/approve` · `/reject` | Duyệt / từ chối. Đổi, nhường ca: cần `duty.swap.approve` đúng khoa. Ngoại lệ: cần `duty.exception.resolve` | `duty.swap.approve` \| `duty.exception.resolve` |
 | `POST` | `/duty/exceptions/override` | Điều chỉnh người trực trực tiếp `{slotId, removeUserId?, addUserId?, reason, force?}`, kể cả sau khi chốt | `duty.exception.resolve` |
+
+## Tích hợp máy khoá phòng khám (lịch trực, chỉ đọc)
+
+Tiền tố `/api/integration/duty`. Dành cho máy khoá màn hình phòng khám (`phongkham-unlock`). **Không dùng JWT của người dùng.** Đây là API chỉ đọc và chỉ trả dữ liệu tối thiểu: họ tên, chức danh, mã phòng, mã ca, giờ. Không trả số điện thoại, email hay dữ liệu khác của nhân viên.
+
+**Xác thực.** Gửi header `Authorization: Bearer qlbs_int_…`. Khoá được quản lý bằng lệnh trên máy chủ QLBS (thư mục `backend`):
+
+```bash
+npm run integration:key -- create --name "Máy khóa phòng khám"   # khoá chỉ hiện một lần, đặt vào máy khoá
+npm run integration:key -- list                                  # khoá, lần dùng cuối, số lần dùng, trạng thái
+npm run integration:key -- revoke --id 3                         # thu hồi ngay, mọi yêu cầu sau đó bị từ chối
+```
+
+CSDL chỉ lưu băm SHA-256 của khoá (bảng `integration_keys`, migration `0018`). Khoá có phạm vi `duty:read`. Khoá sai, đã thu hồi hoặc thiếu phạm vi đều bị từ chối.
+
+**Giới hạn IP (tuỳ chọn).** Biến môi trường `INTEGRATION_ALLOWED_IPS=<ip>[,<ip>…]` (để trống = không giới hạn). Địa chỉ được so với IP mà API thấy. Sau nginx, đó là IP thật của máy gọi. Đã kiểm thử: gọi qua web (Next.js) và gọi trực tiếp cho kết quả giống nhau.
+
+| Phương thức | Đường dẫn | Mô tả | Xác thực |
+|---|---|---|---|
+| `GET` | `/integration/duty/on-duty?room=&at=` | Ai đang trực phòng `room` (bỏ trống = mọi phòng) tại thời điểm `at`. Mặc định `at` là bây giờ. Không gồm người đang nghỉ phép | khoá, phạm vi `duty:read` |
+| `GET` | `/integration/duty/roster?from=&to=&room=` | Lịch trực theo khoảng ngày `YYYY-MM-DD` (tối đa 31 ngày). Có cờ `onLeave` | như trên |
+| `GET` | `/integration/duty/rooms` | Danh mục phòng đang hoạt động (`code`, `name`) | như trên |
+
+Ví dụ:
+
+```bash
+curl -H "Authorization: Bearer $QLBS_KEY" \
+  "https://<qlbs>/api/integration/duty/on-duty?room=P7&at=2026-10-12T19:30:00%2B07:00"
+```
+
+Phản hồi thành công theo chuẩn chung `{success: true, data, timestamp}`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "at": "2026-10-12T19:30:00+07:00",
+    "onDuty": [{
+      "room": {"code": "P7", "name": "Phòng khám số 7"},
+      "dutyDate": "2026-10-12",
+      "role": {"code": "BS", "name": "Bác sĩ trực"},
+      "shift": {"code": "D", "name": "Ca đêm", "startTime": "17:00", "endTime": "07:00",
+                "crossesMidnight": true, "startsAt": "2026-10-12T17:00:00+07:00",
+                "endsAt": "2026-10-13T07:00:00+07:00"},
+      "staff": {"username": "bs.huy", "fullName": "Đặng Văn Huy", "title": "Bác sĩ"},
+      "onLeave": false
+    }]
+  },
+  "timestamp": "2026-10-12T12:30:00.000Z"
+}
+```
+
+Lỗi theo chuẩn chung `{success: false, statusCode, message, path, timestamp}`:
+
+| Mã | Khi nào |
+|---|---|
+| 400 | `at` không phải thời điểm ISO 8601 có giờ; `from` hoặc `to` sai định dạng; `to` trước `from`; khoảng quá 31 ngày |
+| 401 | Thiếu khoá, khoá sai hoặc khoá đã thu hồi |
+| 403 | Khoá thiếu phạm vi, hoặc địa chỉ không nằm trong `INTEGRATION_ALLOWED_IPS` |
+
+Quy tắc (mã nguồn: `backend/src/modules/integration/`):
+
+- Chỉ tính **kỳ lịch đã công bố (`CONG_BO`) hoặc đã chốt (`DA_CHOT`)**. Kỳ nháp không bao giờ được trả về.
+- Loại nhân sự đã vô hiệu hoá (`users.active = false`) và phòng đã đóng (`duty_rooms.active = false`).
+- Ca đã tắt trong danh mục vẫn được tính nếu nằm trong kỳ đã công bố hoặc đã chốt. Tắt ca chỉ ngừng xếp ca mới; phân công đã công bố vẫn là cam kết thực tế.
+- Khoảng ca: đầu ca tính vào, cuối ca không tính. Ca đêm `17:00–07:00` phủ cả buổi tối hôm trước lẫn sáng hôm sau.
+- `at` không ghi múi giờ thì hiểu là giờ Bangkok (+07:00).
+- Người có đơn nghỉ phép giao với ngày trực hoặc ngày kết thúc ca (với ca đêm) bị loại khỏi `on-duty`. `roster` vẫn liệt kê, với `onLeave: true`.
+- Mỗi lần khoá được chấp nhận, `last_used_at` và `use_count` được cập nhật. Giá trị khoá không bao giờ được ghi vào nhật ký.
+
+Kiểm thử: `node .ai/examples/integration-api-test.mjs` (51 kiểm tra: xác thực, ca S/C/đêm theo giờ, nghỉ phép, nháp, vô hiệu hoá nhân sự, đóng phòng, phạm vi, thu hồi, nhật ký). Kịch bản tự dọn dữ liệu.

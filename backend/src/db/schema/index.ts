@@ -11,3 +11,4 @@ export * from './ops';
 export * from './assets';
 export * from './studio';
 export * from './duty';
+export * from './integration';

@@ -50,6 +50,8 @@ export const config = {
   /** Bật tài liệu Swagger (mặc định bật ở môi trường không phải production) */
   swagger: bool(process.env.SWAGGER_ENABLED, process.env.NODE_ENV !== 'production'),
   corsOrigins: list(process.env.CORS_ORIGINS, ['*']),
+  /** Địa chỉ được gọi API tích hợp (máy khoá). Trống = không giới hạn IP, chỉ kiểm tra khoá API */
+  integrationAllowedIps: list(process.env.INTEGRATION_ALLOWED_IPS, []),
   timezone: process.env.TZ ?? 'Asia/Ho_Chi_Minh',
   locale: process.env.LOCALE ?? 'vi-VN',
 

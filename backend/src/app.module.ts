@@ -32,6 +32,7 @@ import { NotifyChannelsModule } from './modules/notify-channels/notify-channels.
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { DutyModule } from './modules/duty/duty.module';
+import { IntegrationModule } from './modules/integration/integration.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { UtilitiesModule } from './modules/utilities/utilities.module';
 import { BackupsModule } from './modules/backups/backups.module';
@@ -78,6 +79,7 @@ const envFile = [
     DashboardModule,
     AssetsModule,
     DutyModule,
+    IntegrationModule,
     // Studio + realtime (GĐ3): báo cáo/dashboard tùy biến, SSE
     RealtimeModule,
     StudioModule,
