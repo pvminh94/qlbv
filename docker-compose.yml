@@ -78,6 +78,8 @@ services:
     volumes:
       - ${UPLOAD_HOST_DIR:-./data/uploads}:/app/uploads
       - ${BACKUP_HOST_DIR:-./data/backups}:/app/backups
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - '${API_PORT:-4000}:4000'
 
