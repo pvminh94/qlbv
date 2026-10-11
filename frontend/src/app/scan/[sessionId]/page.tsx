@@ -49,7 +49,8 @@ export default function MobileScanPage() {
         if (!resp.ok) {
           throw new Error('Mã QR đã hết hạn hoặc phiên không tồn tại. Vui lòng quét lại trên màn hình phòng khám.');
         }
-        const data = await resp.json();
+        const raw = await resp.json();
+        const data = raw?.data ?? raw;
         setSessionData(data);
       } catch (err: any) {
         setSessionError(err.message || 'Lỗi nạp phiên.');
@@ -150,7 +151,8 @@ export default function MobileScanPage() {
         }),
       });
 
-      const data = await resp.json();
+      const raw = await resp.json();
+      const data = raw?.data ?? raw;
 
       if (!resp.ok) {
         throw new Error(data.message || 'Xác thực khuôn mặt thất bại.');

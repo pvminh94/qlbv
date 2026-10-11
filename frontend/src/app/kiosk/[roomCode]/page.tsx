@@ -74,7 +74,9 @@ export default function KioskPage() {
         setQrUrl((prev) => prev || fallbackUrl);
         return;
       }
-      const data = await resp.json();
+      const raw = await resp.json();
+      // Bóc lớp { success: true, data: { ... } } do TransformInterceptor của NestJS tạo ra
+      const data = raw?.data ?? raw;
 
       if (data?.room) {
         setRoomInfo(data.room);
@@ -112,8 +114,9 @@ export default function KioskPage() {
         body: JSON.stringify({ roomCode, roomName: roomInfo.name }),
       });
       if (resp.ok) {
-        const data = await resp.json();
-        if (data.success && data.qrUrl) {
+        const raw = await resp.json();
+        const data = raw?.data ?? raw;
+        if (data?.qrUrl) {
           setQrUrl(data.qrUrl);
           setExpiresInSeconds(data.expiresInSeconds || 90);
         }
@@ -547,12 +550,11 @@ export default function KioskPage() {
           {/* Cột phải: Mã QR động */}
           <div className="flex flex-col items-center justify-center">
             <div className="relative p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-teal-500/30 flex items-center justify-center min-w-[260px] min-h-[260px]">
-              {qrUrl ? (
-                <canvas ref={qrCanvasRef} />
-              ) : (
+              <canvas ref={qrCanvasRef} className={!qrUrl ? 'hidden' : 'block'} />
+              {!qrUrl && (
                 <div className="flex flex-col items-center justify-center p-6 text-slate-400 text-center">
                   <Loader2 className="h-8 w-8 animate-spin text-teal-600 mb-2" />
-                  <span className="text-xs font-medium">Đang tạo mã QR...</span>
+                  <span className="text-xs font-medium">Đang tạo mã QR bảo mật...</span>
                 </div>
               )}
             </div>
