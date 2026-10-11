@@ -6,5 +6,6 @@ import { IntegrationKeyGuard } from './integration-key.guard';
 @Module({
   controllers: [IntegrationController],
   providers: [IntegrationDutyService, IntegrationKeyGuard],
+  exports: [IntegrationDutyService],
 })
 export class IntegrationModule {}

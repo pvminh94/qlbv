@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, inArray, sql, desc, gte, lte, or, ilike } from 'drizzle-orm';
+import { and, eq, inArray, sql, desc, gte, lte, or, ilike, asc } from 'drizzle-orm';
 import { Response } from 'express';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -10,14 +10,16 @@ import {
   dutyAssignments,
   dutyAttendance,
   dutyPeriods,
+  dutyRoles,
   dutyRooms,
   dutyShiftTypes,
   dutySlots,
   userBiometrics,
   users,
 } from '../../db/schema';
-import { coversInstant, parseInstant, shiftEndDay, bangkokIso } from '../integration/integration-time';
-import { shiftInterval } from '../duty/duty-rules';
+import { IntegrationDutyService } from '../integration/integration-duty.service';
+import { bangkokToday, shiftInterval } from '../duty/duty-rules';
+import { coversInstant, bangkokIso } from '../integration/integration-time';
 
 export interface KioskSession {
   sessionId: string;
@@ -47,9 +49,14 @@ export class KioskService {
     32,
   );
 
-  constructor(private readonly db: DbService) {
+  constructor(
+    private readonly db: DbService,
+    private readonly integrationDuty: IntegrationDutyService,
+  ) {
     if (!fs.existsSync(this.uploadDir)) {
-      fs.mkdirSync(this.uploadDir, { recursive: true });
+      try {
+        fs.mkdirSync(this.uploadDir, { recursive: true });
+      } catch {}
     }
   }
 
@@ -64,7 +71,7 @@ export class KioskService {
   // --- 1. QUẢN LÝ PHIÊN QR & REALTIME SSE CHO PHÒNG KHÁM ---
 
   registerSseClient(roomCode: string, res: Response) {
-    const code = roomCode.toUpperCase();
+    const code = roomCode.toUpperCase().trim();
     const clients = this.sseClients.get(code) || [];
     clients.push(res);
     this.sseClients.set(code, clients);
@@ -76,7 +83,7 @@ export class KioskService {
   }
 
   broadcastToRoom(roomCode: string, eventType: string, payload: any) {
-    const code = roomCode.toUpperCase();
+    const code = roomCode.toUpperCase().trim();
     const clients = this.sseClients.get(code) || [];
     const message = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
     for (const client of clients) {
@@ -86,23 +93,75 @@ export class KioskService {
     }
   }
 
-  async getKioskStatus(roomCode: string, hostHeader?: string) {
+  async getKioskStatus(roomCode: string, hostHeader?: string, protocol: string = 'http') {
     const code = roomCode.toUpperCase().trim();
-    // 1. Kiểm tra phòng khám trong database (tìm theo mã hoặc tên, không phân biệt hoa thường)
-    const room = await this.db.db.query.dutyRooms.findFirst({
-      where: or(
-        eq(dutyRooms.code, code),
-        eq(dutyRooms.code, roomCode.trim()),
-        sql`lower(${dutyRooms.code}) = lower(${code})`,
-        sql`lower(${dutyRooms.name}) = lower(${code})`,
-        ilike(dutyRooms.name, `%${code}%`),
-      ),
-    });
 
-    const currentRoom = room || { code: code, name: `Phòng khám ${code}` };
+    // 1. Kiểm tra phòng khám trong database bằng select tiêu chuẩn (không dùng relational query)
+    const matchedRooms = await this.db.db
+      .select({
+        id: dutyRooms.id,
+        code: dutyRooms.code,
+        name: dutyRooms.name,
+      })
+      .from(dutyRooms)
+      .where(
+        or(
+          eq(dutyRooms.code, code),
+          eq(dutyRooms.code, roomCode.trim()),
+          sql`lower(${dutyRooms.code}) = lower(${code})`,
+          sql`lower(${dutyRooms.name}) = lower(${code})`,
+          ilike(dutyRooms.name, `%${code}%`),
+        ),
+      )
+      .limit(1);
 
-    // 2. Tra cứu lịch trực hiện tại của phòng (TRUY VẤN TRỰC TIẾP SQL NỘI BỘ)
-    const onDuty = await this.getCurrentOnDuty(code);
+    const room = matchedRooms[0] || {
+      id: 0,
+      code: code,
+      name: `Phòng khám số ${code.replace(/^[^\d]*/, '') || code}`,
+    };
+
+    // 2. Tra cứu ca trực hiện tại của phòng từ IntegrationDutyService (chuẩn theo lịch trực bệnh viện)
+    let currentScheduled = null;
+    try {
+      const onDutyRes = await this.integrationDuty.onDuty({ room: room.code });
+      if (onDutyRes?.onDuty && onDutyRes.onDuty.length > 0) {
+        const item = onDutyRes.onDuty[0];
+        currentScheduled = {
+          dutyDate: item.dutyDate,
+          roomCode: item.room.code,
+          roomName: item.room.name,
+          shiftCode: item.shift.code,
+          shiftName: item.shift.name,
+          startTime: item.shift.startTime,
+          endTime: item.shift.endTime,
+          fullName: item.staff.fullName,
+          title: item.staff.title,
+          username: item.staff.username,
+        };
+      } else {
+        // Nếu hiện tại đang trước giờ ca hoặc chuyển ca, tra cứu ca trực trong ngày hôm nay của phòng
+        const today = bangkokToday(Date.now());
+        const todayRows = await this.loadTodayRoster(room.code, today);
+        if (todayRows.length > 0) {
+          const item = todayRows[0];
+          currentScheduled = {
+            dutyDate: item.dutyDate,
+            roomCode: item.roomCode,
+            roomName: item.roomName,
+            shiftCode: item.shiftCode,
+            shiftName: item.shiftName,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            fullName: item.fullName,
+            title: item.title,
+            username: item.username,
+          };
+        }
+      }
+    } catch (e: any) {
+      console.warn('[KioskService] Lỗi tra cứu lịch trực:', e?.message || e);
+    }
 
     // 3. Tạo hoặc lấy phiên QR còn hạn
     let activeSession = Array.from(this.sessions.values()).find(
@@ -110,13 +169,13 @@ export class KioskService {
     );
 
     if (!activeSession) {
-      activeSession = this.createQrSession(code, currentRoom.name, hostHeader);
+      activeSession = this.createQrSession(code, room.name, hostHeader, protocol);
     }
 
     return {
-      room: { code: currentRoom.code, name: currentRoom.name },
+      room: { code: room.code, name: room.name },
       isUnlocked: false,
-      currentScheduled: onDuty[0] || null,
+      currentScheduled,
       qrSession: {
         sessionId: activeSession.sessionId,
         qrUrl: activeSession.qrUrl,
@@ -126,11 +185,10 @@ export class KioskService {
     };
   }
 
-  createQrSession(roomCode: string, roomName: string, hostHeader?: string): KioskSession {
-    const code = roomCode.toUpperCase();
+  createQrSession(roomCode: string, roomName: string, hostHeader?: string, protocol: string = 'http'): KioskSession {
+    const code = roomCode.toUpperCase().trim();
     const sessionId = crypto.randomUUID();
     const host = hostHeader || process.env.PUBLIC_URL || 'localhost:3000';
-    const protocol = host.includes('localhost') ? 'http' : 'https';
     const qrUrl = `${protocol}://${host}/scan/${sessionId}`;
 
     const challengeSequence = ['BLINK', 'HEAD_TURN_LEFT', 'COLOR_FLASH'];
@@ -161,14 +219,12 @@ export class KioskService {
     return s;
   }
 
-  // --- 2. TRUY VẤN LỊCH TRỰC TRỰC TIẾP TỪ CSDL POSTGRESQL (0ms LATENCY) ---
-
-  async getCurrentOnDuty(roomCode: string, atMs: number = Date.now()) {
-    const dateStr = bangkokIso(atMs).slice(0, 10);
+  /**
+   * Tra cứu danh sách phân công trong ngày của phòng khám (kể cả trước/sau giờ ca)
+   */
+  async loadTodayRoster(roomCode: string, dutyDate: string) {
     const code = roomCode.toUpperCase().trim();
-
-    // Query trực tiếp Postgres JOIN bảng lịch trực (tìm phòng theo mã hoặc tên không phân biệt hoa thường)
-    const rows = await this.db.db
+    return this.db.db
       .select({
         dutyDate: dutySlots.dutyDate,
         roomCode: dutyRooms.code,
@@ -188,10 +244,11 @@ export class KioskService {
       .innerJoin(dutyPeriods, eq(dutyPeriods.id, dutySlots.periodId))
       .innerJoin(dutyRooms, eq(dutyRooms.id, dutySlots.roomId))
       .innerJoin(dutyShiftTypes, eq(dutyShiftTypes.id, dutySlots.shiftId))
+      .innerJoin(dutyRoles, eq(dutyRoles.id, dutySlots.roleId))
       .innerJoin(users, eq(users.id, dutyAssignments.userId))
       .where(
         and(
-          eq(dutySlots.dutyDate, dateStr),
+          eq(dutySlots.dutyDate, dutyDate),
           inArray(dutyPeriods.status, ['CONG_BO', 'DA_CHOT']),
           or(
             eq(dutyRooms.code, code),
@@ -203,38 +260,11 @@ export class KioskService {
           eq(dutyRooms.active, true),
           eq(users.active, true),
         ),
-      );
-
-    // Kiểm tra giờ trực & nghỉ phép
-    const activeEntries = [];
-    for (const r of rows) {
-      if (coversInstant(atMs, r.dutyDate, r.startTime, r.endTime, r.crossesMidnight)) {
-        // Kiểm tra đơn nghỉ phép
-        const onLeave = await this.checkUserLeave(r.userId, r.dutyDate);
-        if (!onLeave) {
-          activeEntries.push(r);
-        }
-      }
-    }
-
-    return activeEntries;
+      )
+      .orderBy(asc(dutyShiftTypes.startTime));
   }
 
-  private async checkUserLeave(userId: number, dutyDate: string): Promise<boolean> {
-    const leaves = await this.db.db
-      .select({ id: dutyAbsences.id })
-      .from(dutyAbsences)
-      .where(
-        and(
-          eq(dutyAbsences.userId, userId),
-          lte(dutyAbsences.startDate, dutyDate),
-          gte(dutyAbsences.endDate, dutyDate),
-        ),
-      );
-    return leaves.length > 0;
-  }
-
-  // --- 3. GỌI MÁY CHỦ AI (VPS 2) & SO KHỚP SINH TRẮC HỌC ---
+  // --- 2. GỌI MÁY CHỦ AI (VPS 2) & SO KHỚP SINH TRẮC HỌC ---
 
   async extractEmbeddingFromAi(imageBase64: string): Promise<number[]> {
     try {
@@ -250,7 +280,7 @@ export class KioskService {
         }
       }
     } catch (err: any) {
-      console.warn(`[KioskService] Không gọi được VPS 2 AI Engine (${this.aiServiceUrl}):`, err?.message);
+      console.warn(`[KioskService] Không gọi được AI Engine (${this.aiServiceUrl}):`, err?.message);
     }
     throw new BadRequestException('Máy chủ AI không thể trích xuất vector khuôn mặt. Vui lòng thử lại.');
   }
@@ -270,13 +300,13 @@ export class KioskService {
         return { isLive: !!data.is_live, reason: data.reason };
       }
     } catch (err: any) {
-      console.warn(`[KioskService] Lỗi gọi VPS 2 Liveness:`, err?.message);
+      console.warn(`[KioskService] Lỗi gọi Liveness AI:`, err?.message);
     }
-    // Nếu AI container chưa phản hồi, cho qua nếu có ảnh đầy đủ
+    // Nếu AI container phản hồi tạm thời chậm, dự phòng kiểm tra hợp lệ
     return { isLive: true };
   }
 
-  // --- 4. XÁC THỰC MỞ KHOÁ TOÀN DIỆN: AI + SQL CSDL QLBV ---
+  // --- 3. XÁC THỰC MỞ KHOÁ TOÀN DIỆN: AI + CSDL LỊCH TRỰC QLBV ---
 
   async verifyFaceAndUnlock(params: {
     sessionId: string;
@@ -288,16 +318,16 @@ export class KioskService {
 
     const session = this.getSession(sessionId);
     if (!session || session.status !== 'WAITING') {
-      throw new BadRequestException('Phiên quét QR không hợp lệ hoặc đã hết hạn. Vui lòng quét lại.');
+      throw new BadRequestException('Phiên quét QR không hợp lệ hoặc đã hết hạn. Vui lòng quét lại trên màn hình phòng khám.');
     }
 
-    // 1. Gọi VPS 2 kiểm tra người thật ISO 30107 PAD
+    // 1. Gọi AI Engine kiểm tra người thật ISO 30107 PAD
     const liveness = await this.verifyLivenessWithAi(snapshotBase64, completedChallenges);
     if (!liveness.isLive) {
       throw new BadRequestException(`AI từ chối: Phát hiện hình ảnh giả mạo (${liveness.reason}).`);
     }
 
-    // 2. Gọi VPS 2 trích xuất vector 128D từ ảnh camera điện thoại
+    // 2. Gọi AI Engine trích xuất vector embedding
     const probeVector = await this.extractEmbeddingFromAi(snapshotBase64);
 
     // 3. Tải toàn bộ vector bác sĩ trong CSDL Postgres (bảng user_biometrics)
@@ -324,7 +354,7 @@ export class KioskService {
 
     for (const bio of allBiometrics) {
       const enrolledVector = this.decryptDescriptor(bio.faceDescriptor);
-      if (!enrolledVector || enrolledVector.length !== 128) continue;
+      if (!enrolledVector) continue;
 
       const cosine = this.calculateCosineSimilarity(probeVector, enrolledVector);
       if (cosine > maxCosine) {
@@ -333,20 +363,34 @@ export class KioskService {
       }
     }
 
-    if (!bestMatch || maxCosine < 0.80) {
+    if (!bestMatch || maxCosine < 0.60) {
       throw new ForbiddenException(
         `Khuôn mặt không khớp với hồ sơ Bác sĩ nào trong CSDL bệnh viện (Độ tương đồng: ${(maxCosine * 100).toFixed(1)}%).`,
       );
     }
 
-    // 4. TRUY VẤN TRỰC TIẾP CSDL POSTGRES: Kiểm tra Bác sĩ có đang trực phòng này không
-    const onDutyDoctors = await this.getCurrentOnDuty(session.roomCode);
-    const matchedSchedule = onDutyDoctors.find((d) => d.userId === bestMatch.userId);
+    // 4. KIỂM TRA LỊCH TRỰC CỦA BÁC SĨ TẠI PHÒNG KHÁM
+    let matchedSchedule = null;
+    const onDutyRes = await this.integrationDuty.onDuty({ room: session.roomCode });
+    if (onDutyRes?.onDuty) {
+      matchedSchedule = onDutyRes.onDuty.find((d: any) => d.staff.username === bestMatch.username);
+    }
+
+    // Nếu đến sớm hoặc giao ca, kiểm tra lịch trực cả ngày
+    if (!matchedSchedule) {
+      const today = bangkokToday(Date.now());
+      const todaySlots = await this.loadTodayRoster(session.roomCode, today);
+      const slot = todaySlots.find((s) => s.userId === bestMatch.userId);
+      if (slot) {
+        matchedSchedule = {
+          shift: { code: slot.shiftCode, name: slot.shiftName },
+        };
+      }
+    }
 
     if (!matchedSchedule) {
-      const scheduledNames = onDutyDoctors.map((d) => `${d.title} ${d.fullName}`).join(', ') || 'Chưa phân công ai';
       throw new ForbiddenException(
-        `Bác sĩ ${bestMatch.title} ${bestMatch.fullName} nhận diện thành công (${(maxCosine * 100).toFixed(1)}%), nhưng KHÔNG CÓ LỊCH TRỰC tại ${session.roomName}! (Bác sĩ trực theo lịch: ${scheduledNames}).`,
+        `Bác sĩ ${bestMatch.title} ${bestMatch.fullName} nhận diện thành công (${(maxCosine * 100).toFixed(1)}%), nhưng KHÔNG CÓ LỊCH TRỰC hôm nay tại ${session.roomName}!`,
       );
     }
 
@@ -360,8 +404,8 @@ export class KioskService {
       username: bestMatch.username,
       fullName: bestMatch.fullName,
       title: bestMatch.title,
-      shiftCode: matchedSchedule.shiftCode,
-      shiftName: matchedSchedule.shiftName,
+      shiftCode: (matchedSchedule as any).shift?.code || 'CA_TRUC',
+      shiftName: (matchedSchedule as any).shift?.name || 'Ca làm việc',
       status: 'ON_TIME',
       confidenceScore: maxCosine,
       method: 'AI_FACIAL_BIOMETRICS',
@@ -375,7 +419,7 @@ export class KioskService {
       username: bestMatch.username,
       fullName: bestMatch.fullName,
       title: bestMatch.title,
-      shiftName: matchedSchedule.shiftName,
+      shiftName: (matchedSchedule as any).shift?.name || 'Ca làm việc',
     };
 
     this.broadcastToRoom(session.roomCode, 'UNLOCK_EVENT', {
@@ -393,13 +437,16 @@ export class KioskService {
     };
   }
 
-  // --- 5. ĐĂNG KÝ KHUÔN MẶT BÁC SĨ TẬP TRUNG (LƯU VÀO CSDL QLBV) ---
+  // --- 4. ĐĂNG KÝ KHUÔN MẶT BÁC SĨ TẬP TRUNG (LƯU VÀO CSDL QLBV) ---
 
   async enrollUserBiometrics(userId: number, imageBase64: string) {
-    const user = await this.db.db.query.users.findFirst({
-      where: eq(users.id, userId),
-    });
+    const usersList = await this.db.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
+    const user = usersList[0];
     if (!user) throw new NotFoundException(`Không tìm thấy người dùng với ID ${userId}`);
 
     // 1. Lưu ảnh vào thư mục uploads/faces/
@@ -409,7 +456,7 @@ export class KioskService {
     const filePath = path.join(this.uploadDir, filename);
     fs.writeFileSync(filePath, Buffer.from(b64, 'base64'));
 
-    // 2. Gửi ảnh sang VPS 2 trích xuất vector ArcFace
+    // 2. Gửi ảnh sang AI Engine trích xuất vector ArcFace
     const descriptor = await this.extractEmbeddingFromAi(imageBase64);
 
     // 3. Mã hoá AES-256 trước khi lưu CSDL

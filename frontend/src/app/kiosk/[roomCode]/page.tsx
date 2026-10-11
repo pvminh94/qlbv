@@ -13,6 +13,7 @@ import {
   Sun,
   Moon,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { KioskLockdown } from '@/lib/kiosk-lockdown';
@@ -24,7 +25,7 @@ export default function KioskPage() {
 
   const [roomInfo, setRoomInfo] = useState<{ code: string; name: string }>({
     code: roomCode,
-    name: `Phòng khám ${roomCode}`,
+    name: `Phòng khám số ${roomCode.replace(/^[^\d]*/, '') || roomCode}`,
   });
   const [scheduledDuty, setScheduledDuty] = useState<any>(null);
   const [qrUrl, setQrUrl] = useState<string>('');
@@ -40,7 +41,6 @@ export default function KioskPage() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
   const [lockConfirmOpen, setLockConfirmOpen] = useState(false);
-  const [statusError, setStatusError] = useState<string | null>(null);
 
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const secretClickCountRef = useRef(0);
@@ -69,7 +69,7 @@ export default function KioskPage() {
     try {
       const resp = await fetch(`/api/kiosk/status?room=${encodeURIComponent(roomCode)}`);
       if (!resp.ok) {
-        // Nếu phòng chưa đăng ký trong danh mục, vẫn tạo phiên QR cục bộ để không treo màn hình
+        // Dự phòng phiên QR cục bộ nếu API trả lỗi
         const fallbackUrl = `${window.location.origin}/scan/${roomCode}_${Date.now()}`;
         setQrUrl((prev) => prev || fallbackUrl);
         return;
@@ -95,7 +95,6 @@ export default function KioskPage() {
       }
     } catch (err: any) {
       console.warn('Lỗi nạp trạng thái Kiosk:', err?.message || err);
-      // Dự phòng URL quét
       if (typeof window !== 'undefined') {
         const fallbackUrl = `${window.location.origin}/scan/${roomCode}_fallback`;
         setQrUrl((prev) => prev || fallbackUrl);
@@ -187,7 +186,7 @@ export default function KioskPage() {
       });
 
       eventSource.onerror = () => {
-        // Bỏ qua lỗi kết nối SSE tự động kết nối lại
+        // SSE tự động kết nối lại khi có gián đoạn mạng
       };
     } catch (err) {
       console.warn('Không thể khởi tạo EventSource SSE:', err);
@@ -308,7 +307,7 @@ export default function KioskPage() {
               <button
                 type="button"
                 onClick={() => setLockConfirmOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/30 transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-lg shadow-rose-600/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                 title="Khoá màn hình máy tính ngay lập tức khi rời phòng"
               >
                 <Lock className="h-3.5 w-3.5" />
@@ -318,7 +317,7 @@ export default function KioskPage() {
               <button
                 type="button"
                 onClick={() => setIsMinimized(true)}
-                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors cursor-pointer"
                 title="Thu nhỏ thanh tiện ích"
               >
                 <Minimize2 className="h-4 w-4" />
@@ -329,7 +328,7 @@ export default function KioskPage() {
           <button
             type="button"
             onClick={() => setIsMinimized(false)}
-            className="flex items-center gap-2 px-3 py-2 rounded-full border border-teal-500/40 bg-slate-900/90 backdrop-blur-md shadow-xl text-teal-300 hover:text-white transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-full border border-teal-500/40 bg-slate-900/90 backdrop-blur-md shadow-xl text-teal-300 hover:text-white transition-all cursor-pointer"
           >
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -345,7 +344,7 @@ export default function KioskPage() {
         {lockConfirmOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
             <div className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-slate-900 p-6 shadow-2xl">
-              <h3 className="text-base font-bold text-white mb-2">Khoá máy tính phòng khám {roomCode}?</h3>
+              <h3 className="text-base font-bold text-white mb-2">Khoá máy tính {roomInfo.name} [{roomCode}]?</h3>
               <p className="text-xs text-slate-400 mb-6">
                 Màn hình máy tính Windows sẽ lập tức được phủ Kiosk toàn màn hình và yêu cầu Bác sĩ quét QR để mở khoá.
               </p>
@@ -353,14 +352,14 @@ export default function KioskPage() {
                 <button
                   type="button"
                   onClick={() => setLockConfirmOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 text-xs font-semibold"
+                  className="flex-1 py-2.5 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
                 >
                   Huỷ bỏ
                 </button>
                 <button
                   type="button"
                   onClick={handleLockRoom}
-                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold"
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer"
                 >
                   Khoá máy ngay
                 </button>
@@ -442,7 +441,7 @@ export default function KioskPage() {
           <button
             type="button"
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className="p-2.5 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60 text-slate-700 dark:text-slate-300"
+            className="p-2.5 rounded-xl border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 cursor-pointer"
             title="Chuyển chế độ Sáng / Tối"
           >
             {isDarkMode ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-teal-600" />}
@@ -451,7 +450,7 @@ export default function KioskPage() {
           <button
             type="button"
             onClick={() => setIsITModalOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 rounded-xl"
+            className="flex items-center gap-1.5 text-xs font-medium border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60 px-3 py-2 rounded-xl cursor-pointer"
             title="Hỗ trợ IT (Ctrl + Shift + Alt + F12)"
           >
             <Lock className="h-3.5 w-3.5" />
@@ -501,7 +500,7 @@ export default function KioskPage() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <span className="text-xs opacity-70 block">Bác sĩ khám chính:</span>
-                  <span className="font-bold text-sm sm:text-base">
+                  <span className="font-bold text-sm sm:text-base text-teal-400">
                     {scheduledDuty?.title ? `${scheduledDuty.title} ` : ''}
                     {scheduledDuty?.fullName || 'Chờ bác sĩ nhận ca...'}
                   </span>
@@ -509,7 +508,9 @@ export default function KioskPage() {
                 <div>
                   <span className="text-xs opacity-70 block">Khung giờ trực:</span>
                   <span className="font-semibold text-teal-600 dark:text-teal-300 font-mono">
-                    {scheduledDuty?.startTime || '07:00'} – {scheduledDuty?.endTime || '17:00'}
+                    {scheduledDuty?.startTime && scheduledDuty?.endTime
+                      ? `${scheduledDuty.startTime} – ${scheduledDuty.endTime}`
+                      : '07:00 – 17:00'}
                   </span>
                 </div>
               </div>
@@ -545,8 +546,15 @@ export default function KioskPage() {
 
           {/* Cột phải: Mã QR động */}
           <div className="flex flex-col items-center justify-center">
-            <div className="relative p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-teal-500/30">
-              <canvas ref={qrCanvasRef} />
+            <div className="relative p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-teal-500/30 flex items-center justify-center min-w-[260px] min-h-[260px]">
+              {qrUrl ? (
+                <canvas ref={qrCanvasRef} />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-slate-400 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-teal-600 mb-2" />
+                  <span className="text-xs font-medium">Đang tạo mã QR...</span>
+                </div>
+              )}
             </div>
 
             <div className="mt-4 flex items-center gap-3 text-xs opacity-75">
@@ -606,13 +614,13 @@ export default function KioskPage() {
               <button
                 type="button"
                 onClick={() => setIsITModalOpen(false)}
-                className="flex-1 py-2 rounded-xl border border-slate-700 text-xs text-slate-300"
+                className="flex-1 py-2 rounded-xl border border-slate-700 text-xs text-slate-300 cursor-pointer"
               >
                 Đóng
               </button>
               <button
                 type="submit"
-                className="flex-1 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-xs font-bold text-white"
+                className="flex-1 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-xs font-bold text-white cursor-pointer"
               >
                 Mở khoá
               </button>

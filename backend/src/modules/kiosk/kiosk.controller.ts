@@ -7,6 +7,7 @@ import { Public } from '../../common/decorators';
 import { KioskService } from './kiosk.service';
 
 @ApiTags('Kiosk · Điểm danh Sinh trắc học & Mở khoá Phòng khám')
+@Public()
 @Controller('kiosk')
 export class KioskController {
   constructor(private readonly service: KioskService) {}
@@ -14,8 +15,14 @@ export class KioskController {
   @Public()
   @Get('status')
   @ApiOperation({ summary: 'Trạng thái Kiosk phòng khám & phiên mã QR động' })
-  async getStatus(@Query('room') room: string, @Headers('host') host: string) {
-    return this.service.getKioskStatus(room || 'PK01', host);
+  async getStatus(
+    @Query('room') room: string,
+    @Headers('host') host: string,
+    @Headers('x-forwarded-proto') proto?: string,
+  ) {
+    const isHttps = proto === 'https' || (host && !host.includes(':') && !/^(\d+\.){3}\d+/.test(host));
+    const protocol = isHttps ? 'https' : 'http';
+    return this.service.getKioskStatus(room || 'PK01', host, protocol);
   }
 
   @Public()
@@ -24,11 +31,15 @@ export class KioskController {
   async refreshSession(
     @Body() body: { roomCode: string; roomName?: string },
     @Headers('host') host: string,
+    @Headers('x-forwarded-proto') proto?: string,
   ) {
+    const isHttps = proto === 'https' || (host && !host.includes(':') && !/^(\d+\.){3}\d+/.test(host));
+    const protocol = isHttps ? 'https' : 'http';
     const session = this.service.createQrSession(
       body.roomCode || 'PK01',
       body.roomName || `Phòng khám ${body.roomCode}`,
       host,
+      protocol,
     );
     return {
       success: true,
@@ -36,6 +47,26 @@ export class KioskController {
       qrUrl: session.qrUrl,
       expiresInSeconds: 90,
       challengeSequence: session.challengeSequence,
+    };
+  }
+
+  @Public()
+  @Get('session/:sessionId')
+  @ApiOperation({ summary: 'Lấy thông tin phiên quét cho điện thoại Bác sĩ' })
+  async getSessionInfo(@Param('sessionId') sessionId: string) {
+    const session = this.service.getSession(sessionId);
+    if (!session) {
+      return {
+        sessionId,
+        room: { code: 'PK', name: 'Phòng khám' },
+        status: 'WAITING',
+      };
+    }
+    return {
+      sessionId: session.sessionId,
+      room: { code: session.roomCode, name: session.roomName },
+      challengeSequence: session.challengeSequence,
+      status: session.status,
     };
   }
 
@@ -72,15 +103,20 @@ export class KioskController {
     @Body()
     body: {
       sessionId: string;
-      snapshotBase64: string;
+      snapshotBase64?: string;
+      imageBase64?: string;
       completedChallenges?: string[];
+      livenessChallenges?: string[];
       deviceInfo?: string;
     },
   ) {
+    const image = body.snapshotBase64 || body.imageBase64 || '';
+    const challenges = body.completedChallenges || body.livenessChallenges || ['BLINK'];
+
     return this.service.verifyFaceAndUnlock({
       sessionId: body.sessionId,
-      snapshotBase64: body.snapshotBase64,
-      completedChallenges: body.completedChallenges || ['BLINK'],
+      snapshotBase64: image,
+      completedChallenges: challenges,
       deviceInfo: body.deviceInfo,
     });
   }
