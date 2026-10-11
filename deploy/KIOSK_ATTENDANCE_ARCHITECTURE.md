@@ -91,3 +91,31 @@ Các tệp cấu hình tại thư mục `deploy/windows/`:
 2. `cai_dat_chong_xoa_vinh_vien.bat`: Đưa file vào thư mục ẩn `C:\ProgramData\QLBS_Kiosk`, phân quyền NTFS `icacls` cấm người dùng xoá (`Deny Delete`), đồng thời đăng ký Windows Task Scheduler khởi động ngầm.
 3. `chay_kiosk_phong_kham.bat`: Khởi chạy Edge/Chrome Kiosk kết nối tới VPS 1.
 4. `go_bo_kiosk_it.bat` & `khoi_phuc_windows_mac_dinh.bat`: Kịch bản dành riêng cho IT bệnh viện khi cần bảo trì, khôi phục cài đặt mặc định của Windows.
+
+---
+
+## 4. QUY TRÌNH TRIỂN KHAI VÀ CẬP NHẬT HỆ THỐNG
+
+### Trên VPS 2 (AI Microservice Container)
+```bash
+git clone https://github.com/pvminh94/qlbs-attendance-web.git /opt/qlbs-attendance-web
+cd /opt/qlbs-attendance-web
+docker compose up -d --build
+```
+
+### Trên VPS 1 (Ứng dụng QLBV — Cập nhật chuẩn qua update.sh)
+Hệ thống QLBV được đóng gói tự động hóa hoàn toàn với Docker Compose. Khi có mã nguồn mới, **chỉ cần chạy duy nhất 1 lệnh**:
+
+```bash
+cd /opt/qlbs   # (hoặc thư mục chứa mã nguồn QLBV)
+sudo bash deploy/update.sh
+```
+
+**Cách thức `update.sh` tự động xử lý ngầm:**
+1. **Tự động `git pull`:** Kéo nhánh mới nhất mà không cần thao tác git thủ công.
+2. **Tự động phát hiện thay đổi:** Nhận biết thay đổi ở `backend/` và `frontend/` để kích hoạt dựng lại dịch vụ tương ứng (`qlbs-api` và `qlbs-web`) với BuildKit cache.
+3. **Tự động chạy Migration CSDL:** Khi container `qlbs-api` khởi động, entrypoint trong `backend/Dockerfile` tự động kích hoạt `scripts/migrate.ts` để áp dụng ngay các tệp migration mới (`0019_kiosk_duty_attendance.sql`) vào PostgreSQL. Người quản trị không cần gõ lệnh migration thủ công.
+4. **Tự động kiểm tra sức khỏe:** Kiểm tra điểm cuối `/health` của API và trang web đăng nhập trước khi hoàn tất thông báo `✓ Cập nhật xong`.
+
+*(Nếu muốn đổi IP kết nối tới VPS 2, thêm dòng `BIOMETRIC_AI_SERVICE_URL=http://<IP_VPS_2>:8001` vào file `.env` tại thư mục gốc trước khi chạy `update.sh`).*
+
