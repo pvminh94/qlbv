@@ -38,6 +38,7 @@ import { UtilitiesModule } from './modules/utilities/utilities.module';
 import { BackupsModule } from './modules/backups/backups.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { StudioModule } from './modules/studio/studio.module';
+import { KioskModule } from './modules/kiosk/kiosk.module';
 
 const envFile = [
   path.resolve(process.cwd(), '.env'),
@@ -83,6 +84,8 @@ const envFile = [
     // Studio + realtime (GĐ3): báo cáo/dashboard tùy biến, SSE
     RealtimeModule,
     StudioModule,
+    // Phân hệ Kiosk Điểm danh Sinh trắc học & Mở khoá Phòng khám (Tích hợp VPS 2 AI)
+    KioskModule,
     // Kiểm tra tình trạng
     HealthModule,
   ],

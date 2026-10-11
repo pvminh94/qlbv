@@ -12,3 +12,4 @@ export * from './assets';
 export * from './studio';
 export * from './duty';
 export * from './integration';
+export * from './kiosk-attendance';
