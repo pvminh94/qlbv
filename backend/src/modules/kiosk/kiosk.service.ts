@@ -25,6 +25,8 @@ export interface KioskSession {
   sessionId: string;
   roomCode: string;
   roomName: string;
+  terminalId: string;       // ID máy trạm duy nhất gắn với phiên này
+  handshakePin: string;     // Mã 4 số xác nhận hiện diện tại chỗ (Live Visual Handshake PIN)
   createdAt: number;
   expiresAt: number;
   qrUrl: string;
@@ -37,7 +39,10 @@ export interface KioskSession {
 @Injectable()
 export class KioskService {
   private readonly sessions = new Map<string, KioskSession>();
-  private readonly sseClients = new Map<string, Response[]>();
+  // Lưu kết nối SSE theo từng terminalId (Unicast)
+  private readonly terminalClients = new Map<string, Response>();
+  // Lưu danh sách terminal theo từng roomCode
+  private readonly roomTerminals = new Map<string, Set<string>>();
 
   // Thư mục lưu ảnh khuôn mặt bác sĩ
   private readonly uploadDir = path.resolve(process.cwd(), 'uploads', 'faces');
@@ -70,31 +75,69 @@ export class KioskService {
 
   // --- 1. QUẢN LÝ PHIÊN QR & REALTIME SSE CHO PHÒNG KHÁM ---
 
-  registerSseClient(roomCode: string, res: Response) {
+  registerSseClient(roomCode: string, terminalId: string | undefined, res: Response) {
     const code = roomCode.toUpperCase().trim();
-    const clients = this.sseClients.get(code) || [];
-    clients.push(res);
-    this.sseClients.set(code, clients);
+    const tid = terminalId?.trim() || `term_${code}_${Date.now()}`;
+
+    // 1. Lưu kết nối đích danh máy trạm
+    this.terminalClients.set(tid, res);
+
+    // 2. Lưu liên kết phòng khám -> máy trạm
+    const set = this.roomTerminals.get(code) || new Set<string>();
+    set.add(tid);
+    this.roomTerminals.set(code, set);
 
     res.on('close', () => {
-      const remaining = (this.sseClients.get(code) || []).filter((c) => c !== res);
-      this.sseClients.set(code, remaining);
+      this.terminalClients.delete(tid);
+      const s = this.roomTerminals.get(code);
+      if (s) {
+        s.delete(tid);
+        if (s.size === 0) this.roomTerminals.delete(code);
+      }
     });
   }
 
+  /**
+   * Bắn sự kiện đích danh (Unicast) tới đúng một máy trạm vật lý duy nhất
+   */
+  sendToTerminal(terminalId: string, eventType: string, payload: any): boolean {
+    const client = this.terminalClients.get(terminalId);
+    if (client) {
+      try {
+        client.write(`event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`);
+        return true;
+      } catch (err) {
+        this.terminalClients.delete(terminalId);
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Phát sự kiện tới toàn bộ máy trạm của một phòng khám (dùng dự phòng hoặc khi khoá khẩn cấp)
+   */
   broadcastToRoom(roomCode: string, eventType: string, payload: any) {
     const code = roomCode.toUpperCase().trim();
-    const clients = this.sseClients.get(code) || [];
+    const termSet = this.roomTerminals.get(code);
+    if (!termSet || termSet.size === 0) return;
+
     const message = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
-    for (const client of clients) {
-      try {
-        client.write(message);
-      } catch {}
+    for (const tid of Array.from(termSet)) {
+      const client = this.terminalClients.get(tid);
+      if (client) {
+        try {
+          client.write(message);
+        } catch {
+          this.terminalClients.delete(tid);
+          termSet.delete(tid);
+        }
+      }
     }
   }
 
-  async getKioskStatus(roomCode: string, hostHeader?: string, protocol: string = 'http') {
+  async getKioskStatus(roomCode: string, terminalId?: string, hostHeader?: string, protocol: string = 'http') {
     const code = roomCode.toUpperCase().trim();
+    const tid = terminalId?.trim() || '';
 
     // 1. Kiểm tra phòng khám trong database bằng select tiêu chuẩn (không dùng relational query)
     const matchedRooms = await this.db.db
@@ -163,13 +206,17 @@ export class KioskService {
       console.warn('[KioskService] Lỗi tra cứu lịch trực:', e?.message || e);
     }
 
-    // 3. Tạo hoặc lấy phiên QR còn hạn
+    // 3. Tạo hoặc lấy phiên QR còn hạn của đúng máy trạm (terminalId) này
     let activeSession = Array.from(this.sessions.values()).find(
-      (s) => s.roomCode === code && s.status === 'WAITING' && s.expiresAt > Date.now(),
+      (s) =>
+        s.roomCode === code &&
+        (!tid || s.terminalId === tid) &&
+        s.status === 'WAITING' &&
+        s.expiresAt > Date.now(),
     );
 
     if (!activeSession) {
-      activeSession = this.createQrSession(code, room.name, hostHeader, protocol);
+      activeSession = this.createQrSession(code, room.name, tid, hostHeader, protocol);
     }
 
     return {
@@ -179,17 +226,28 @@ export class KioskService {
       qrSession: {
         sessionId: activeSession.sessionId,
         qrUrl: activeSession.qrUrl,
+        handshakePin: activeSession.handshakePin,
         expiresInSeconds: Math.max(0, Math.round((activeSession.expiresAt - Date.now()) / 1000)),
         challengeSequence: activeSession.challengeSequence,
       },
     };
   }
 
-  createQrSession(roomCode: string, roomName: string, hostHeader?: string, protocol: string = 'http'): KioskSession {
+  createQrSession(
+    roomCode: string,
+    roomName: string,
+    terminalId?: string,
+    hostHeader?: string,
+    protocol: string = 'http',
+  ): KioskSession {
     const code = roomCode.toUpperCase().trim();
+    const tid = terminalId?.trim() || '';
     const sessionId = crypto.randomUUID();
     const host = hostHeader || process.env.PUBLIC_URL || 'localhost:3000';
     const qrUrl = `${protocol}://${host}/scan/${sessionId}`;
+
+    // Sinh mã xác nhận hiện diện 4 số ngẫu nhiên (1000 - 9999)
+    const handshakePin = Math.floor(1000 + Math.random() * 9000).toString();
 
     const challengeSequence = ['BLINK', 'HEAD_TURN_LEFT', 'COLOR_FLASH'];
     const flashColorSequence = ['#0284c7', '#16a34a', '#dc2626'];
@@ -198,6 +256,8 @@ export class KioskService {
       sessionId,
       roomCode: code,
       roomName,
+      terminalId: tid,
+      handshakePin,
       createdAt: Date.now(),
       expiresAt: Date.now() + 90 * 1000, // 90 giây
       qrUrl,
@@ -205,6 +265,15 @@ export class KioskService {
       flashColorSequence,
       status: 'WAITING',
     };
+
+    // Dọn các phiên WAITING cũ của đúng terminal này
+    if (tid) {
+      for (const [sId, s] of this.sessions.entries()) {
+        if (s.terminalId === tid && s.status === 'WAITING') {
+          this.sessions.delete(sId);
+        }
+      }
+    }
 
     this.sessions.set(sessionId, session);
     return session;
@@ -310,15 +379,25 @@ export class KioskService {
 
   async verifyFaceAndUnlock(params: {
     sessionId: string;
+    handshakePin?: string;
     snapshotBase64: string;
     completedChallenges: string[];
     deviceInfo?: string;
   }) {
-    const { sessionId, snapshotBase64, completedChallenges, deviceInfo } = params;
+    const { sessionId, handshakePin, snapshotBase64, completedChallenges, deviceInfo } = params;
 
     const session = this.getSession(sessionId);
     if (!session || session.status !== 'WAITING') {
       throw new BadRequestException('Phiên quét QR không hợp lệ hoặc đã hết hạn. Vui lòng quét lại trên màn hình phòng khám.');
+    }
+
+    // 0. BẢO MẬT HIỆN DIỆN VẬT LÝ (Physical Co-Presence Proof):
+    // Bác sĩ bắt buộc phải nhìn lên màn hình máy tính phòng khám để lấy mã 4 số đang hiển thị
+    const inputPin = handshakePin?.toString().trim();
+    if (!inputPin || inputPin !== session.handshakePin) {
+      throw new BadRequestException(
+        'Mã xác thực hiện diện (4 số) không chính xác! Bác sĩ vui lòng nhìn trực tiếp lên màn hình máy tính phòng khám để nhập đúng mã 4 số đang hiển thị.',
+      );
     }
 
     // 1. Gọi AI Engine kiểm tra người thật ISO 30107 PAD
@@ -412,7 +491,7 @@ export class KioskService {
       deviceInfo: deviceInfo || 'Mobile Web Camera',
     });
 
-    // 6. Cập nhật phiên & BẮN SỰ KIỆN SSE MỞ KHOÁ MÁY TÍNH PHÒNG KHÁM
+    // 6. Cập nhật phiên & BẮN SỰ KIỆN SSE MỞ KHOÁ ĐÍCH DANH DUY NHẤT MÁY TRẠM PHÒNG KHÁM (UNICAST)
     session.status = 'VERIFIED';
     session.verifiedDoctor = {
       userId: bestMatch.userId,
@@ -422,12 +501,23 @@ export class KioskService {
       shiftName: (matchedSchedule as any).shift?.name || 'Ca làm việc',
     };
 
-    this.broadcastToRoom(session.roomCode, 'UNLOCK_EVENT', {
+    const unlockPayload = {
       type: 'UNLOCK_SUCCESS',
       doctor: session.verifiedDoctor,
       roomCode: session.roomCode,
+      terminalId: session.terminalId,
       attendanceId,
-    });
+    };
+
+    // Bắn đích danh máy tính phòng khám đã sinh mã QR này (Unicast)
+    let unlocked = false;
+    if (session.terminalId) {
+      unlocked = this.sendToTerminal(session.terminalId, 'UNLOCK_EVENT', unlockPayload);
+    }
+    // Dự phòng broadcast nếu máy trạm chưa kịp gán terminalId
+    if (!unlocked) {
+      this.broadcastToRoom(session.roomCode, 'UNLOCK_EVENT', unlockPayload);
+    }
 
     return {
       success: true,

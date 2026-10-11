@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Shield,
+  ShieldCheck,
   Clock,
   Stethoscope,
   Lock,
@@ -29,6 +30,8 @@ export default function KioskPage() {
   });
   const [scheduledDuty, setScheduledDuty] = useState<any>(null);
   const [qrUrl, setQrUrl] = useState<string>('');
+  const [handshakePin, setHandshakePin] = useState<string>('');
+  const [terminalId, setTerminalId] = useState<string>('');
   const [expiresInSeconds, setExpiresInSeconds] = useState<number>(90);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showExitWarning, setShowExitWarning] = useState(false);
@@ -45,6 +48,18 @@ export default function KioskPage() {
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const secretClickCountRef = useRef(0);
   const secretClickTimeoutRef = useRef<any>(null);
+
+  // 0. Khởi tạo mã định danh duy nhất của máy trạm này (Terminal ID)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `kiosk_term_${roomCode}`;
+    let tid = sessionStorage.getItem(key);
+    if (!tid) {
+      tid = `term_${roomCode}_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+      sessionStorage.setItem(key, tid);
+    }
+    setTerminalId(tid);
+  }, [roomCode]);
 
   // 1. Đồng hồ thời gian thực
   useEffect(() => {
@@ -63,11 +78,14 @@ export default function KioskPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // 2. Tải trạng thái phòng và tạo/lấy phiên QR
-  const fetchKioskStatus = async () => {
+  // 2. Tải trạng thái phòng và tạo/lấy phiên QR gắn với đúng máy trạm này
+  const fetchKioskStatus = async (curTid?: string) => {
     if (!roomCode) return;
+    const tid = curTid || terminalId;
     try {
-      const resp = await fetch(`/api/kiosk/status?room=${encodeURIComponent(roomCode)}`);
+      const query = new URLSearchParams({ room: roomCode });
+      if (tid) query.set('terminalId', tid);
+      const resp = await fetch(`/api/kiosk/status?${query.toString()}`);
       if (!resp.ok) {
         // Dự phòng phiên QR cục bộ nếu API trả lỗi
         const fallbackUrl = `${window.location.origin}/scan/${roomCode}_${Date.now()}`;
@@ -94,6 +112,9 @@ export default function KioskPage() {
       if (data?.qrSession?.qrUrl) {
         setQrUrl(data.qrSession.qrUrl);
         setExpiresInSeconds(data.qrSession.expiresInSeconds || 90);
+        if (data.qrSession.handshakePin) {
+          setHandshakePin(data.qrSession.handshakePin);
+        }
       }
     } catch (err: any) {
       console.warn('Lỗi nạp trạng thái Kiosk:', err?.message || err);
@@ -104,14 +125,14 @@ export default function KioskPage() {
     }
   };
 
-  // 3. Làm mới mã QR
+  // 3. Làm mới mã QR gắn với đúng máy trạm này
   const refreshQrSession = async () => {
     setIsRefreshing(true);
     try {
       const resp = await fetch('/api/kiosk/session/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode, roomName: roomInfo.name }),
+        body: JSON.stringify({ roomCode, roomName: roomInfo.name, terminalId }),
       });
       if (resp.ok) {
         const raw = await resp.json();
@@ -119,6 +140,9 @@ export default function KioskPage() {
         if (data?.qrUrl) {
           setQrUrl(data.qrUrl);
           setExpiresInSeconds(data.expiresInSeconds || 90);
+          if (data.handshakePin) {
+            setHandshakePin(data.handshakePin);
+          }
         }
       }
     } catch (err) {
@@ -157,20 +181,25 @@ export default function KioskPage() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [roomInfo.name, isUnlocked, roomCode]);
+  }, [roomInfo.name, isUnlocked, roomCode, terminalId]);
 
-  // 6. Lắng nghe sự kiện mở khoá Server-Sent Events (SSE) thời gian thực
+  // 6. Lắng nghe sự kiện mở khoá Server-Sent Events (SSE) thời gian thực đích danh máy trạm
   useEffect(() => {
-    if (!roomCode) return;
-    fetchKioskStatus();
+    if (!roomCode || !terminalId) return;
+    fetchKioskStatus(terminalId);
 
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource(`/api/kiosk/events/${encodeURIComponent(roomCode)}`);
+      const sseUrl = `/api/kiosk/events/${encodeURIComponent(roomCode)}?terminalId=${encodeURIComponent(terminalId)}`;
+      eventSource = new EventSource(sseUrl);
 
       eventSource.addEventListener('UNLOCK_EVENT', (e: any) => {
         try {
           const payload = JSON.parse(e.data);
+          // Kiểm tra đích danh: Chỉ mở khoá nếu sự kiện gửi đích danh cho máy trạm này
+          if (payload.terminalId && payload.terminalId !== terminalId) {
+            return;
+          }
           if (payload.type === 'UNLOCK_SUCCESS') {
             setIsUnlocked(true);
             setActiveSession(payload.doctor);
@@ -185,7 +214,7 @@ export default function KioskPage() {
         setIsUnlocked(false);
         setActiveSession(null);
         KioskLockdown.enterFullscreen().catch(() => {});
-        fetchKioskStatus();
+        fetchKioskStatus(terminalId);
       });
 
       eventSource.onerror = () => {
@@ -200,7 +229,7 @@ export default function KioskPage() {
         eventSource.close();
       }
     };
-  }, [roomCode]);
+  }, [roomCode, terminalId]);
 
   // 7. Khoá tính năng Kiosk chống can thiệp (Anti-Tamper Lockdown)
   useEffect(() => {
@@ -248,7 +277,7 @@ export default function KioskPage() {
       const resp = await fetch('/api/kiosk/override-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomCode, pin: itPinInput }),
+        body: JSON.stringify({ roomCode, pin: itPinInput, terminalId }),
       });
       const data = await resp.json();
       if (!resp.ok) {
@@ -547,7 +576,7 @@ export default function KioskPage() {
             </div>
           </div>
 
-          {/* Cột phải: Mã QR động */}
+          {/* Cột phải: Mã QR động & Mã xác thực hiện diện */}
           <div className="flex flex-col items-center justify-center">
             <div className="relative p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-teal-500/30 flex items-center justify-center min-w-[260px] min-h-[260px]">
               <canvas ref={qrCanvasRef} className={!qrUrl ? 'hidden' : 'block'} />
@@ -559,7 +588,23 @@ export default function KioskPage() {
               )}
             </div>
 
-            <div className="mt-4 flex items-center gap-3 text-xs opacity-75">
+            {/* Mã xác thực hiện diện 4 số (Live Visual Handshake PIN) */}
+            {handshakePin && (
+              <div className="mt-3.5 w-full max-w-[260px] px-4 py-2.5 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border-2 border-teal-500/40 text-center shadow-lg">
+                <div className="text-[10px] font-bold text-teal-800 dark:text-teal-300 uppercase tracking-wider flex items-center justify-center gap-1.5 mb-0.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Mã hiện diện tại phòng</span>
+                </div>
+                <div className="text-3xl font-black font-mono tracking-[0.25em] text-teal-700 dark:text-teal-300 py-0.5">
+                  {handshakePin}
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Nhập 4 số này trên điện thoại để mở máy
+                </div>
+              </div>
+            )}
+
+            <div className="mt-3 flex items-center gap-3 text-xs opacity-75">
               <span>Hết hạn sau: <strong className="font-mono text-teal-600 dark:text-teal-400">{expiresInSeconds}s</strong></span>
               <button
                 type="button"

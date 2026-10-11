@@ -17,19 +17,20 @@ export class KioskController {
   @ApiOperation({ summary: 'Trạng thái Kiosk phòng khám & phiên mã QR động' })
   async getStatus(
     @Query('room') room: string,
+    @Query('terminalId') terminalId: string,
     @Headers('host') host: string,
     @Headers('x-forwarded-proto') proto?: string,
   ) {
     const isHttps = proto === 'https' || (host && !host.includes(':') && !/^(\d+\.){3}\d+/.test(host));
     const protocol = isHttps ? 'https' : 'http';
-    return this.service.getKioskStatus(room || 'PK01', host, protocol);
+    return this.service.getKioskStatus(room || 'PK01', terminalId, host, protocol);
   }
 
   @Public()
   @Post('session/refresh')
   @ApiOperation({ summary: 'Làm mới mã QR cho phòng khám' })
   async refreshSession(
-    @Body() body: { roomCode: string; roomName?: string },
+    @Body() body: { roomCode: string; roomName?: string; terminalId?: string },
     @Headers('host') host: string,
     @Headers('x-forwarded-proto') proto?: string,
   ) {
@@ -38,6 +39,7 @@ export class KioskController {
     const session = this.service.createQrSession(
       body.roomCode || 'PK01',
       body.roomName || `Phòng khám ${body.roomCode}`,
+      body.terminalId,
       host,
       protocol,
     );
@@ -45,6 +47,7 @@ export class KioskController {
       success: true,
       sessionId: session.sessionId,
       qrUrl: session.qrUrl,
+      handshakePin: session.handshakePin,
       expiresInSeconds: 90,
       challengeSequence: session.challengeSequence,
     };
@@ -62,6 +65,8 @@ export class KioskController {
         status: 'WAITING',
       };
     }
+    // Chú ý: Tuyệt đối không trả về handshakePin tại endpoint này
+    // Bác sĩ bắt buộc phải nhìn lên màn hình máy tính phòng khám để nhập mã 4 số
     return {
       sessionId: session.sessionId,
       room: { code: session.roomCode, name: session.roomName },
@@ -73,15 +78,21 @@ export class KioskController {
   @Public()
   @Get('events/:roomCode')
   @ApiOperation({ summary: 'Kênh thời gian thực Server-Sent Events (SSE) mở khoá máy tính phòng khám' })
-  streamEvents(@Param('roomCode') roomCode: string, @Res() res: Response) {
+  streamEvents(
+    @Param('roomCode') roomCode: string,
+    @Query('terminalId') terminalId: string,
+    @Res() res: Response,
+  ) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 
-    // Gửi sự kiện khởi tạo kết nối
-    res.write(`event: CONNECTED\ndata: ${JSON.stringify({ roomCode, connectedAt: new Date().toISOString() })}\n\n`);
+    // Gửi sự kiện khởi tạo kết nối đích danh
+    res.write(
+      `event: CONNECTED\ndata: ${JSON.stringify({ roomCode, terminalId: terminalId || 'default', connectedAt: new Date().toISOString() })}\n\n`,
+    );
 
     // Giữ kết nối SSE bằng heartbeat 25 giây
     const heartbeat = setInterval(() => {
@@ -93,7 +104,7 @@ export class KioskController {
     }, 25000);
 
     res.on('close', () => clearInterval(heartbeat));
-    this.service.registerSseClient(roomCode, res);
+    this.service.registerSseClient(roomCode, terminalId, res);
   }
 
   @Public()
@@ -103,6 +114,7 @@ export class KioskController {
     @Body()
     body: {
       sessionId: string;
+      handshakePin?: string;
       snapshotBase64?: string;
       imageBase64?: string;
       completedChallenges?: string[];
@@ -115,6 +127,7 @@ export class KioskController {
 
     return this.service.verifyFaceAndUnlock({
       sessionId: body.sessionId,
+      handshakePin: body.handshakePin,
       snapshotBase64: image,
       completedChallenges: challenges,
       deviceInfo: body.deviceInfo,
@@ -124,13 +137,13 @@ export class KioskController {
   @Public()
   @Post('override-pin')
   @ApiOperation({ summary: 'Mở khoá khẩn cấp tại chỗ bằng mã PIN IT' })
-  async overridePin(@Body() body: { roomCode: string; pin: string; reason?: string }) {
+  async overridePin(@Body() body: { roomCode: string; pin: string; terminalId?: string; reason?: string }) {
     const masterPin = process.env.IT_MASTER_PIN || '999888';
     if (body.pin !== masterPin) {
       throw new UnauthorizedException('Mã PIN khẩn cấp IT không chính xác.');
     }
 
-    this.service.broadcastToRoom(body.roomCode, 'UNLOCK_EVENT', {
+    const payload = {
       type: 'UNLOCK_SUCCESS',
       doctor: {
         fullName: 'Kỹ thuật viên IT',
@@ -138,8 +151,17 @@ export class KioskController {
         shiftName: 'Mở khoá Khẩn cấp',
       },
       roomCode: body.roomCode,
+      terminalId: body.terminalId,
       method: 'IT_EMERGENCY_PIN',
-    });
+    };
+
+    let sent = false;
+    if (body.terminalId) {
+      sent = this.service.sendToTerminal(body.terminalId, 'UNLOCK_EVENT', payload);
+    }
+    if (!sent) {
+      this.service.broadcastToRoom(body.roomCode, 'UNLOCK_EVENT', payload);
+    }
 
     return { success: true, message: 'Đã mở khoá khẩn cấp phòng khám thành công.' };
   }
