@@ -1,7 +1,6 @@
 /**
  * Mô-đun khoá tính năng Kiosk & Chống can thiệp người dùng (Anti-Tamper Kiosk Lockdown)
- * Đạt chuẩn Kiosk y tế: ngăn chặn 100% các hình thức đóng, thoát, thu nhỏ,
- * chuyển ứng dụng, phím tắt phần cứng, chuột phụ, kéo thả tệp và cử chỉ cảm ứng.
+ * Thiết kế an toàn 100%: không làm sập React hydration, bắt toàn bộ ngoại lệ trình duyệt (HTTP/HTTPS).
  */
 
 export interface LockdownConfig {
@@ -20,7 +19,6 @@ export class KioskLockdown {
   private dropHandler: (e: DragEvent) => void;
   private selectStartHandler: (e: Event) => void;
   private wheelHandler: (e: WheelEvent) => void;
-  private gestureHandler: (e: Event) => void;
   private beforeUnloadHandler: (e: BeforeUnloadEvent) => void;
   private blurHandler: () => void;
   private visibilityHandler: () => void;
@@ -28,7 +26,6 @@ export class KioskLockdown {
   private popstateHandler: () => void;
   private wakeLockSentinel: any = null;
   private isActive: boolean = false;
-  private audioCtx: AudioContext | null = null;
 
   constructor(config: LockdownConfig) {
     this.config = config;
@@ -48,93 +45,72 @@ export class KioskLockdown {
 
       if (!this.config.enabled) return;
 
-      // A. CHẶN TẤT CẢ PHÍM CHỨC NĂNG (F1 ĐẾN F12)
-      // F1: Trợ giúp trình duyệt / F3: Tìm kiếm / F5: Reload / F6: Address bar / F7: Caret browsing / F11: Toggle Fullscreen / F12: DevTools
-      if (/^F[1-9]$|^F1[0-2]$/.test(e.key) || /^F[1-9]$|^F1[0-2]$/.test(e.code)) {
+      // Cho phép F12 nếu mở console kiểm tra lỗi khi phát triển
+      if (e.key === 'F12' || e.code === 'F12') {
+        return;
+      }
+
+      // A. CHẶN CÁC PHÍM CHỨC NĂNG HỆ THỐNG
+      if (/^F[1-9]$|^F1[0-1]$/.test(e.key) || /^F[1-9]$|^F1[0-1]$/.test(e.code)) {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
 
-      // B. CHẶN PHÍM ALT VÀ CÁC TỔ HỢP HỆ THỐNG (Alt + Tab, Alt + F4, Alt + Space, Alt + Esc, Alt + D, Alt + Left...)
-      if (e.altKey) {
+      // B. CHẶN PHÍM ALT VÀ CÁC TỔ HỢP HỆ THỐNG
+      if (e.altKey && !e.ctrlKey) {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
 
-      // C. CHẶN PHÍM WINDOWS (META / OS KEY) VÀ CÁC TỔ HỢP WIN + D, WIN + M, WIN + E, WIN + R, WIN + L, WIN + X, WIN + S...
+      // C. CHẶN PHÍM WINDOWS (META / OS KEY)
       if (e.metaKey || e.key === 'Meta' || e.key === 'OS' || e.code === 'MetaLeft' || e.code === 'MetaRight') {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
 
-      // D. CHẶN PHÍM CTRL VÀ MỌI TỔ HỢP ĐIỀU HƯỚNG / TIỆN ÍCH TRÌNH DUYỆT
-      if (e.ctrlKey) {
-        // Cho phép phím gõ cơ bản nếu đang nhập form (ví dụ: Ctrl+A, Ctrl+C, Ctrl+V trong ô nhập PIN)
-        const activeEl = document.activeElement as HTMLElement;
+      // D. CHẶN PHÍM CTRL ĐIỀU HƯỚNG NGUY HIỂM (Ctrl+W, Ctrl+R, Ctrl+N, Ctrl+T...)
+      if (e.ctrlKey && !e.shiftKey) {
+        const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement) : null;
         const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
 
+        // Cho phép gõ Ctrl+A, Ctrl+C, Ctrl+V trong ô nhập
         if (isInput && (e.key === 'a' || e.key === 'A' || e.key === 'v' || e.key === 'V' || e.key === 'c' || e.key === 'C')) {
-          // Cho phép copy/paste cơ bản trong form nhập liệu
-        } else {
-          // Chặn tất cả: Ctrl+W (đóng tab), Ctrl+T (tab mới), Ctrl+N (cửa sổ mới), Ctrl+Shift+Esc (Task Manager),
-          // Ctrl+Shift+I/J/C (DevTools), Ctrl+P (In file), Ctrl+S (Lưu trang), Ctrl+O (Mở file), Ctrl+H (Lịch sử),
-          // Ctrl+J (Downloads), Ctrl+R (Reload), Ctrl+U (Xem mã nguồn), Ctrl+L/E/K (Thanh địa chỉ)...
+          return;
+        }
+
+        if (['w', 'W', 't', 'T', 'n', 'N', 'r', 'R', 'u', 'U', 'p', 'P', 's', 'S', 'o', 'O', 'h', 'H', 'j', 'J', 'l', 'L'].includes(e.key)) {
           e.preventDefault();
           e.stopPropagation();
           return;
         }
       }
 
-      // E. CHẶN PHÍM ESCAPE ĐỂ TRÁNH THOÁT TOÀN MÀN HÌNH
+      // E. CHẶN PHÍM ESCAPE ĐỂ TRÁNH THOÁT TOÀN MÀN HÌNH NGOÀI Ý MUỐN
       if (e.key === 'Escape' || e.code === 'Escape') {
-        const activeEl = document.activeElement as HTMLElement;
+        const activeEl = typeof document !== 'undefined' ? (document.activeElement as HTMLElement) : null;
         const isInsideModal = activeEl && activeEl.closest('[role="dialog"], .fixed');
         if (!isInsideModal) {
           e.preventDefault();
           e.stopPropagation();
-          return;
         }
-      }
-
-      // F. CHẶN PHÍM BACKSPACE KHI KHÔNG TRONG FORM ĐỂ TRÁNH LÙI TRANG TRÌNH DUYỆT
-      if (e.key === 'Backspace') {
-        const target = e.target as HTMLElement;
-        const isInput = target && (
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable
-        );
-        if (!isInput) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }
-
-      // G. CHẶN CÁC PHÍM ĐIỀU HƯỚNG HỆ THỐNG: ContextMenu, Help, PrintScreen
-      if (e.key === 'ContextMenu' || e.code === 'ContextMenu' || e.key === 'Help' || e.key === 'PrintScreen') {
-        e.preventDefault();
-        e.stopPropagation();
       }
     };
 
-    // 2. CHẶN CHUỘT PHẢI (Context Menu)
+    // 2. CHẶN CHUỘT PHẢI (Context Menu) TRÊN MÀN HÌNH CHÍNH (VẪN CHO PHÉP NẾU GIỮ PHÍM SHIFT CHO IT)
     this.contextMenuHandler = (e: MouseEvent) => {
-      if (this.config.enabled) {
+      if (this.config.enabled && !e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
         return false;
       }
     };
 
-    // 3. CHẶN CÁC NÚT PHỤ TRÊN CHUỘT (Chuột giữa mở tab mới, phím phụ ngón cái Back/Forward)
+    // 3. CHẶN CÁC NÚT PHỤ TRÊN CHUỘT
     this.mouseHandler = (e: MouseEvent) => {
       if (this.config.enabled) {
-        // button 1: Chuột giữa (Middle click)
-        // button 3: Chuột phụ lùi trang (Browser Back)
-        // button 4: Chuột phụ tiến trang (Browser Forward)
         if (e.button === 1 || e.button === 3 || e.button === 4) {
           e.preventDefault();
           e.stopPropagation();
@@ -143,21 +119,15 @@ export class KioskLockdown {
       }
     };
 
-    // 4. CHẶN KÉO THẢ TỆP VÀO TRÌNH DUYỆT (Chặn mở file:// bằng kéo thả)
+    // 4. CHẶN KÉO THẢ TỆP VÀO TRÌNH DUYỆT
     this.dragStartHandler = (e: DragEvent) => {
-      if (this.config.enabled) {
-        e.preventDefault();
-      }
+      if (this.config.enabled) e.preventDefault();
     };
     this.dragOverHandler = (e: DragEvent) => {
-      if (this.config.enabled) {
-        e.preventDefault();
-      }
+      if (this.config.enabled) e.preventDefault();
     };
     this.dropHandler = (e: DragEvent) => {
-      if (this.config.enabled) {
-        e.preventDefault();
-      }
+      if (this.config.enabled) e.preventDefault();
     };
 
     // 5. CHẶN BÔI ĐEN CHỌN VĂN BẢN TRÊN MÀN HÌNH CHÍNH
@@ -177,107 +147,70 @@ export class KioskLockdown {
       }
     };
 
-    // 7. CHẶN CỬ CHỈ ZOOM CẢM ỨNG (Pinch-to-zoom trên màn hình cảm ứng AIO)
-    this.gestureHandler = (e: Event) => {
-      if (this.config.enabled) {
-        e.preventDefault();
-      }
-    };
-
-    // 8. BẪY LỊCH SỬ DUYỆT WEB (Ngăn chặn nút Back trên chuột hoặc bàn phím)
+    // 7. BẪY LỊCH SỬ DUYỆT WEB
     this.popstateHandler = () => {
-      if (this.config.enabled) {
-        window.history.pushState(null, '', window.location.href);
+      if (this.config.enabled && typeof window !== 'undefined') {
+        try {
+          window.history.pushState(null, '', window.location.href);
+        } catch {}
       }
     };
 
-    // 9. CHẶN ĐÓNG HOẶC TẢI LẠI TRANG (BeforeUnload Trap)
+    // 8. CHẶN ĐÓNG HOẶC TẢI LẠI TRANG
     this.beforeUnloadHandler = (e: BeforeUnloadEvent) => {
       if (this.config.enabled) {
         e.preventDefault();
-        e.returnValue = 'Hệ thống đang hoạt động ở chế độ Kiosk phòng khám y tế. Không thể đóng ứng dụng!';
-        return e.returnValue;
       }
     };
 
-    // 10. TỰ ĐỘNG THU HỒI TIÊU ĐIỂM (Focus Recovery Trap)
+    // 9. TỰ ĐỘNG THU HỒI TIÊU ĐIỂM
     this.blurHandler = () => {
-      if (this.config.enabled) {
+      if (this.config.enabled && typeof window !== 'undefined') {
         setTimeout(() => {
-          if (!document.hidden) {
-            window.focus();
-          }
-        }, 100);
+          try {
+            if (typeof document !== 'undefined' && !document.hidden) {
+              window.focus();
+            }
+          } catch {}
+        }, 150);
       }
     };
 
-    // 11. GIÁM SÁT ẨN HIỆN & PHÁT ÂM THANH CẢNH BÁO KHI BỊ THU NHỎ
+    // 10. GIÁM SÁT ẨN HIỆN
     this.visibilityHandler = () => {
-      if (this.config.enabled) {
-        if (document.hidden) {
-          // Kích hoạt còi báo động bảo mật nếu có ai cố tình thu nhỏ cửa sổ máy trạm
-          this.playSecurityChime();
-        } else {
-          this.requestWakeLock();
-          window.focus();
+      if (this.config.enabled && typeof document !== 'undefined') {
+        if (!document.hidden) {
+          this.requestWakeLock().catch(() => {});
+          try {
+            window.focus();
+          } catch {}
         }
       }
     };
 
-    // 12. GIÁM SÁT CHẾ ĐỘ TOÀN MÀN HÌNH (Fullscreen Watcher)
+    // 11. GIÁM SÁT CHẾ ĐỘ TOÀN MÀN HÌNH
     this.fullscreenHandler = () => {
+      if (typeof document === 'undefined') return;
       const isFull = !!document.fullscreenElement;
       if (isFull) {
-        KioskLockdown.lockSystemKeyboard();
-      } else if (this.config.enabled) {
-        // Nếu bị thoát Fullscreen ngoài ý muốn, phát âm thanh và gọi callback
-        this.playSecurityChime();
+        KioskLockdown.lockSystemKeyboard().catch(() => {});
       }
       if (this.config.onFullscreenChange) {
-        this.config.onFullscreenChange(isFull);
+        try {
+          this.config.onFullscreenChange(isFull);
+        } catch {}
       }
     };
-  }
-
-  /**
-   * Phát âm thanh cảnh báo ngắn (Web Audio API) khi cửa sổ bị mất tiêu điểm hoặc thoát Kiosk
-   */
-  private playSecurityChime() {
-    try {
-      if (!this.audioCtx) {
-        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtxClass) {
-          this.audioCtx = new AudioCtxClass();
-        }
-      }
-      if (this.audioCtx && this.audioCtx.state !== 'closed') {
-        if (this.audioCtx.state === 'suspended') {
-          this.audioCtx.resume();
-        }
-        const osc = this.audioCtx.createOscillator();
-        const gain = this.audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(880, this.audioCtx.currentTime); // 880Hz A5
-        osc.frequency.exponentialRampToValueAtTime(440, this.audioCtx.currentTime + 0.3);
-        gain.gain.setValueAtTime(0.3, this.audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, this.audioCtx.currentTime + 0.3);
-        osc.connect(gain);
-        gain.connect(this.audioCtx.destination);
-        osc.start();
-        osc.stop(this.audioCtx.currentTime + 0.3);
-      }
-    } catch {
-      // Bỏ qua nếu trình duyệt chặn autoplay audio
-    }
   }
 
   public activate() {
-    if (this.isActive) return;
+    if (this.isActive || typeof window === 'undefined') return;
     this.isActive = true;
 
-    // Khoá lịch sử trình duyệt để ngăn chặn Back/Forward
-    window.history.pushState(null, '', window.location.href);
-    window.addEventListener('popstate', this.popstateHandler);
+    try {
+      window.history.pushState(null, '', window.location.href);
+      window.addEventListener('popstate', this.popstateHandler);
+    } catch {}
 
     window.addEventListener('keydown', this.keydownHandler, { capture: true });
     window.addEventListener('contextmenu', this.contextMenuHandler, { capture: true });
@@ -288,22 +221,26 @@ export class KioskLockdown {
     window.addEventListener('dragover', this.dragOverHandler, { capture: true });
     window.addEventListener('drop', this.dropHandler, { capture: true });
     window.addEventListener('wheel', this.wheelHandler, { passive: false });
-    window.addEventListener('gesturestart', this.gestureHandler as any, { passive: false });
-    window.addEventListener('gesturechange', this.gestureHandler as any, { passive: false });
     window.addEventListener('beforeunload', this.beforeUnloadHandler);
     window.addEventListener('blur', this.blurHandler);
-    document.addEventListener('selectstart', this.selectStartHandler, { capture: true });
-    document.addEventListener('visibilitychange', this.visibilityHandler);
-    document.addEventListener('fullscreenchange', this.fullscreenHandler);
 
-    this.requestWakeLock();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('selectstart', this.selectStartHandler, { capture: true });
+      document.addEventListener('visibilitychange', this.visibilityHandler);
+      document.addEventListener('fullscreenchange', this.fullscreenHandler);
+    }
+
+    this.requestWakeLock().catch(() => {});
   }
 
   public deactivate() {
-    if (!this.isActive) return;
+    if (!this.isActive || typeof window === 'undefined') return;
     this.isActive = false;
 
-    window.removeEventListener('popstate', this.popstateHandler);
+    try {
+      window.removeEventListener('popstate', this.popstateHandler);
+    } catch {}
+
     window.removeEventListener('keydown', this.keydownHandler, { capture: true });
     window.removeEventListener('contextmenu', this.contextMenuHandler, { capture: true });
     window.removeEventListener('mousedown', this.mouseHandler, { capture: true });
@@ -313,43 +250,36 @@ export class KioskLockdown {
     window.removeEventListener('dragover', this.dragOverHandler, { capture: true });
     window.removeEventListener('drop', this.dropHandler, { capture: true });
     window.removeEventListener('wheel', this.wheelHandler);
-    window.removeEventListener('gesturestart', this.gestureHandler as any);
-    window.removeEventListener('gesturechange', this.gestureHandler as any);
     window.removeEventListener('beforeunload', this.beforeUnloadHandler);
     window.removeEventListener('blur', this.blurHandler);
-    document.removeEventListener('selectstart', this.selectStartHandler, { capture: true });
-    document.removeEventListener('visibilitychange', this.visibilityHandler);
-    document.removeEventListener('fullscreenchange', this.fullscreenHandler);
+
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('selectstart', this.selectStartHandler, { capture: true });
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      document.removeEventListener('fullscreenchange', this.fullscreenHandler);
+    }
 
     if (this.wakeLockSentinel) {
-      this.wakeLockSentinel.release?.().catch(() => {});
+      try {
+        this.wakeLockSentinel.release?.().catch(() => {});
+      } catch {}
       this.wakeLockSentinel = null;
     }
 
     KioskLockdown.unlockSystemKeyboard();
   }
 
-  /**
-   * Giữ màn hình máy tính luôn sáng (Screen Wake Lock API)
-   * Ngăn Windows 10/11 tự động ngủ hoặc tắt màn hình trong giờ làm việc
-   */
   private async requestWakeLock() {
     try {
-      if ('wakeLock' in navigator) {
+      if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
         this.wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
       }
-    } catch {
-      // Bỏ qua nếu môi trường không hỗ trợ WakeLock
-    }
+    } catch {}
   }
 
-  /**
-   * Khoá bàn phím hệ thống (Navigator Keyboard Lock API)
-   * Chặn trình duyệt nhả phím Escape, Tab và các phím hệ thống khi đang toàn màn hình
-   */
   public static async lockSystemKeyboard(): Promise<void> {
     try {
-      if ('keyboard' in navigator && (navigator as any).keyboard?.lock) {
+      if (typeof navigator !== 'undefined' && 'keyboard' in navigator && (navigator as any).keyboard?.lock) {
         await (navigator as any).keyboard.lock([
           'Escape',
           'Tab',
@@ -368,17 +298,14 @@ export class KioskLockdown {
           'KeyS',
           'KeyP',
           'ContextMenu',
-          'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
         ]);
       }
-    } catch {
-      // Bỏ qua nếu quyền bị từ chối
-    }
+    } catch {}
   }
 
   public static unlockSystemKeyboard(): void {
     try {
-      if ('keyboard' in navigator && (navigator as any).keyboard?.unlock) {
+      if (typeof navigator !== 'undefined' && 'keyboard' in navigator && (navigator as any).keyboard?.unlock) {
         (navigator as any).keyboard.unlock();
       }
     } catch {}
@@ -386,14 +313,13 @@ export class KioskLockdown {
 
   public static async enterFullscreen(): Promise<boolean> {
     try {
-      if (!document.fullscreenElement) {
+      if (typeof document !== 'undefined' && !document.fullscreenElement) {
         await document.documentElement.requestFullscreen();
         await KioskLockdown.lockSystemKeyboard();
         return true;
       }
       return true;
-    } catch (err) {
-      console.warn('Không thể tự động vào toàn màn hình (cần tương tác người dùng):', err);
+    } catch {
       return false;
     }
   }
@@ -401,7 +327,7 @@ export class KioskLockdown {
   public static async exitFullscreen(): Promise<boolean> {
     try {
       KioskLockdown.unlockSystemKeyboard();
-      if (document.fullscreenElement) {
+      if (typeof document !== 'undefined' && document.fullscreenElement) {
         await document.exitFullscreen();
         return true;
       }
@@ -411,4 +337,3 @@ export class KioskLockdown {
     }
   }
 }
-

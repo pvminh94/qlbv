@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef, use } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import {
   Camera,
   CheckCircle2,
@@ -16,12 +17,10 @@ import {
   SwitchCamera,
 } from 'lucide-react';
 
-interface PageProps {
-  params: Promise<{ sessionId: string }>;
-}
-
-export default function MobileScanPage({ params }: PageProps) {
-  const { sessionId } = use(params);
+export default function MobileScanPage() {
+  const routeParams = useParams();
+  const rawSessionId = (routeParams?.sessionId as string) || '';
+  const sessionId = decodeURIComponent(rawSessionId);
 
   const [sessionData, setSessionData] = useState<any>(null);
   const [loadingSession, setLoadingSession] = useState(true);

@@ -1,29 +1,26 @@
 'use client';
 
-import React, { useState, useEffect, useRef, use } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import {
   Shield,
   Clock,
   Stethoscope,
   Lock,
-  Maximize,
   CheckCircle2,
   Minimize2,
   RefreshCw,
-  Sparkles,
-  Smartphone,
   Sun,
   Moon,
+  AlertCircle,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { KioskLockdown } from '@/lib/kiosk-lockdown';
 
-interface PageProps {
-  params: Promise<{ roomCode: string }>;
-}
-
-export default function KioskPage({ params }: PageProps) {
-  const { roomCode } = use(params);
+export default function KioskPage() {
+  const routeParams = useParams();
+  const rawRoomCode = (routeParams?.roomCode as string) || 'PK01';
+  const roomCode = decodeURIComponent(rawRoomCode).toUpperCase();
 
   const [roomInfo, setRoomInfo] = useState<{ code: string; name: string }>({
     code: roomCode,
@@ -43,6 +40,7 @@ export default function KioskPage({ params }: PageProps) {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
   const [lockConfirmOpen, setLockConfirmOpen] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const secretClickCountRef = useRef(0);
@@ -51,12 +49,14 @@ export default function KioskPage({ params }: PageProps) {
   // 1. Đồng hồ thời gian thực
   useEffect(() => {
     const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(
-        now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
-          ' · ' +
-          now.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }),
-      );
+      try {
+        const now = new Date();
+        setCurrentTime(
+          now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
+            ' · ' +
+            now.toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        );
+      } catch {}
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -65,26 +65,41 @@ export default function KioskPage({ params }: PageProps) {
 
   // 2. Tải trạng thái phòng và tạo/lấy phiên QR
   const fetchKioskStatus = async () => {
+    if (!roomCode) return;
     try {
-      const resp = await fetch(`/api/kiosk/status?room=${roomCode}`);
-      if (!resp.ok) return;
+      const resp = await fetch(`/api/kiosk/status?room=${encodeURIComponent(roomCode)}`);
+      if (!resp.ok) {
+        // Nếu phòng chưa đăng ký trong danh mục, vẫn tạo phiên QR cục bộ để không treo màn hình
+        const fallbackUrl = `${window.location.origin}/scan/${roomCode}_${Date.now()}`;
+        setQrUrl((prev) => prev || fallbackUrl);
+        return;
+      }
       const data = await resp.json();
 
-      setRoomInfo(data.room);
-      setScheduledDuty(data.currentScheduled || null);
+      if (data?.room) {
+        setRoomInfo(data.room);
+      }
+      if (data?.currentScheduled !== undefined) {
+        setScheduledDuty(data.currentScheduled);
+      }
 
-      if (data.isUnlocked) {
+      if (data?.isUnlocked) {
         setIsUnlocked(true);
         setActiveSession(data.activeSession);
         return;
       }
 
-      if (data.qrSession) {
+      if (data?.qrSession?.qrUrl) {
         setQrUrl(data.qrSession.qrUrl);
-        setExpiresInSeconds(data.qrSession.expiresInSeconds);
+        setExpiresInSeconds(data.qrSession.expiresInSeconds || 90);
       }
-    } catch (err) {
-      console.warn('Lỗi nạp trạng thái Kiosk:', err);
+    } catch (err: any) {
+      console.warn('Lỗi nạp trạng thái Kiosk:', err?.message || err);
+      // Dự phòng URL quét
+      if (typeof window !== 'undefined') {
+        const fallbackUrl = `${window.location.origin}/scan/${roomCode}_fallback`;
+        setQrUrl((prev) => prev || fallbackUrl);
+      }
     }
   };
 
@@ -97,10 +112,12 @@ export default function KioskPage({ params }: PageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomCode, roomName: roomInfo.name }),
       });
-      const data = await resp.json();
-      if (data.success) {
-        setQrUrl(data.qrUrl);
-        setExpiresInSeconds(data.expiresInSeconds || 90);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.success && data.qrUrl) {
+          setQrUrl(data.qrUrl);
+          setExpiresInSeconds(data.expiresInSeconds || 90);
+        }
       }
     } catch (err) {
       console.warn('Lỗi làm mới QR:', err);
@@ -119,6 +136,8 @@ export default function KioskPage({ params }: PageProps) {
           dark: '#0f766e',
           light: '#ffffff',
         },
+      }).catch((err) => {
+        console.warn('Không thể vẽ QR canvas:', err);
       });
     }
   }, [qrUrl]);
@@ -136,36 +155,48 @@ export default function KioskPage({ params }: PageProps) {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [roomInfo.name, isUnlocked]);
+  }, [roomInfo.name, isUnlocked, roomCode]);
 
   // 6. Lắng nghe sự kiện mở khoá Server-Sent Events (SSE) thời gian thực
   useEffect(() => {
+    if (!roomCode) return;
     fetchKioskStatus();
 
-    const eventSource = new EventSource(`/api/kiosk/events/${roomCode}`);
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(`/api/kiosk/events/${encodeURIComponent(roomCode)}`);
 
-    eventSource.addEventListener('UNLOCK_EVENT', (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (payload.type === 'UNLOCK_SUCCESS') {
-          setIsUnlocked(true);
-          setActiveSession(payload.doctor);
-          KioskLockdown.exitFullscreen().catch(() => {});
+      eventSource.addEventListener('UNLOCK_EVENT', (e: any) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.type === 'UNLOCK_SUCCESS') {
+            setIsUnlocked(true);
+            setActiveSession(payload.doctor);
+            KioskLockdown.exitFullscreen().catch(() => {});
+          }
+        } catch (err) {
+          console.warn('Lỗi xử lý sự kiện SSE:', err);
         }
-      } catch (err) {
-        console.warn('Lỗi xử lý sự kiện SSE:', err);
-      }
-    });
+      });
 
-    eventSource.addEventListener('LOCK_EVENT', () => {
-      setIsUnlocked(false);
-      setActiveSession(null);
-      KioskLockdown.enterFullscreen().catch(() => {});
-      fetchKioskStatus();
-    });
+      eventSource.addEventListener('LOCK_EVENT', () => {
+        setIsUnlocked(false);
+        setActiveSession(null);
+        KioskLockdown.enterFullscreen().catch(() => {});
+        fetchKioskStatus();
+      });
+
+      eventSource.onerror = () => {
+        // Bỏ qua lỗi kết nối SSE tự động kết nối lại
+      };
+    } catch (err) {
+      console.warn('Không thể khởi tạo EventSource SSE:', err);
+    }
 
     return () => {
-      eventSource.close();
+      if (eventSource) {
+        eventSource.close();
+      }
     };
   }, [roomCode]);
 
@@ -173,21 +204,25 @@ export default function KioskPage({ params }: PageProps) {
   useEffect(() => {
     if (isUnlocked) return;
 
-    const lockdown = new KioskLockdown({
-      enabled: true,
-      onEmergencyTrigger: () => {
-        setIsITModalOpen(true);
-      },
-      onFullscreenChange: (isFull) => {
-        setShowExitWarning(!isFull);
-        if (!isFull) {
-          KioskLockdown.enterFullscreen().catch(() => {});
-        }
-      },
-    });
+    let lockdown: KioskLockdown | null = null;
+    try {
+      lockdown = new KioskLockdown({
+        enabled: true,
+        onEmergencyTrigger: () => {
+          setIsITModalOpen(true);
+        },
+        onFullscreenChange: (isFull) => {
+          setShowExitWarning(!isFull);
+        },
+      });
+      lockdown.activate();
+    } catch (err) {
+      console.warn('Không thể khởi động KioskLockdown:', err);
+    }
 
-    lockdown.activate();
-    return () => lockdown.deactivate();
+    return () => {
+      if (lockdown) lockdown.deactivate();
+    };
   }, [isUnlocked]);
 
   // Nhấp 5 lần bí mật vào logo để mở bảng IT
@@ -261,10 +296,11 @@ export default function KioskPage({ params }: PageProps) {
                 </span>
               </div>
               <h3 className="text-xs font-bold text-white mt-0.5 truncate">
-                {activeSession?.title || 'BS'} {activeSession?.fullName || 'Bác sĩ khám'}
+                {activeSession?.title ? `${activeSession.title} ` : 'BS '}
+                {activeSession?.fullName || 'Bác sĩ khám'}
               </h3>
               <span className="text-[10px] text-slate-400 font-mono">
-                {activeSession?.shiftName || 'Ca làm việc'} · {currentTime.split('·')[0]}
+                {activeSession?.shiftName || 'Ca làm việc'}
               </span>
             </div>
 
@@ -466,7 +502,8 @@ export default function KioskPage({ params }: PageProps) {
                 <div>
                   <span className="text-xs opacity-70 block">Bác sĩ khám chính:</span>
                   <span className="font-bold text-sm sm:text-base">
-                    {scheduledDuty?.title} {scheduledDuty?.fullName || 'Đang cập nhật...'}
+                    {scheduledDuty?.title ? `${scheduledDuty.title} ` : ''}
+                    {scheduledDuty?.fullName || 'Chờ bác sĩ nhận ca...'}
                   </span>
                 </div>
                 <div>
@@ -518,7 +555,7 @@ export default function KioskPage({ params }: PageProps) {
                 type="button"
                 onClick={refreshQrSession}
                 disabled={isRefreshing}
-                className="flex items-center gap-1 text-teal-600 dark:text-teal-400 hover:underline"
+                className="flex items-center gap-1 text-teal-600 dark:text-teal-400 hover:underline cursor-pointer"
               >
                 <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
                 <span>Đổi mã mới</span>

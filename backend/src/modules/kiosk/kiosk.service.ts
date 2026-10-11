@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, inArray, sql, desc, gte, lte } from 'drizzle-orm';
+import { and, eq, inArray, sql, desc, gte, lte, or, ilike } from 'drizzle-orm';
 import { Response } from 'express';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -87,15 +87,19 @@ export class KioskService {
   }
 
   async getKioskStatus(roomCode: string, hostHeader?: string) {
-    const code = roomCode.toUpperCase();
-    // 1. Kiểm tra phòng khám trong database
+    const code = roomCode.toUpperCase().trim();
+    // 1. Kiểm tra phòng khám trong database (tìm theo mã hoặc tên, không phân biệt hoa thường)
     const room = await this.db.db.query.dutyRooms.findFirst({
-      where: eq(dutyRooms.code, code),
+      where: or(
+        eq(dutyRooms.code, code),
+        eq(dutyRooms.code, roomCode.trim()),
+        sql`lower(${dutyRooms.code}) = lower(${code})`,
+        sql`lower(${dutyRooms.name}) = lower(${code})`,
+        ilike(dutyRooms.name, `%${code}%`),
+      ),
     });
 
-    if (!room) {
-      throw new NotFoundException(`Không tìm thấy phòng khám với mã ${code}`);
-    }
+    const currentRoom = room || { code: code, name: `Phòng khám ${code}` };
 
     // 2. Tra cứu lịch trực hiện tại của phòng (TRUY VẤN TRỰC TIẾP SQL NỘI BỘ)
     const onDuty = await this.getCurrentOnDuty(code);
@@ -106,11 +110,11 @@ export class KioskService {
     );
 
     if (!activeSession) {
-      activeSession = this.createQrSession(code, room.name, hostHeader);
+      activeSession = this.createQrSession(code, currentRoom.name, hostHeader);
     }
 
     return {
-      room: { code: room.code, name: room.name },
+      room: { code: currentRoom.code, name: currentRoom.name },
       isUnlocked: false,
       currentScheduled: onDuty[0] || null,
       qrSession: {
@@ -161,9 +165,9 @@ export class KioskService {
 
   async getCurrentOnDuty(roomCode: string, atMs: number = Date.now()) {
     const dateStr = bangkokIso(atMs).slice(0, 10);
-    const code = roomCode.toUpperCase();
+    const code = roomCode.toUpperCase().trim();
 
-    // Query trực tiếp Postgres JOIN bảng lịch trực
+    // Query trực tiếp Postgres JOIN bảng lịch trực (tìm phòng theo mã hoặc tên không phân biệt hoa thường)
     const rows = await this.db.db
       .select({
         dutyDate: dutySlots.dutyDate,
@@ -189,7 +193,13 @@ export class KioskService {
         and(
           eq(dutySlots.dutyDate, dateStr),
           inArray(dutyPeriods.status, ['CONG_BO', 'DA_CHOT']),
-          eq(dutyRooms.code, code),
+          or(
+            eq(dutyRooms.code, code),
+            eq(dutyRooms.code, roomCode.trim()),
+            sql`lower(${dutyRooms.code}) = lower(${code})`,
+            sql`lower(${dutyRooms.name}) = lower(${code})`,
+            ilike(dutyRooms.name, `%${code}%`),
+          ),
           eq(dutyRooms.active, true),
           eq(users.active, true),
         ),
