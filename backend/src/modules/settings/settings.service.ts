@@ -204,6 +204,26 @@ export function defaultSettings(): SettingItem[] {
     { key: 'telegram.enabled', value: false, group: 'notification', label: 'Gửi thông báo qua Telegram Bot', valueType: 'boolean' },
     { key: 'telegram.botToken', value: '', group: 'notification', label: 'Telegram Bot Token', valueType: 'password', description: 'Tạo miễn phí bằng /newbot tại @BotFather trên Telegram' },
 
+    // Kiosk phòng khám & Điểm danh
+    {
+      key: 'kiosk.itMasterPin',
+      value: '999888',
+      group: 'kiosk',
+      label: 'Mã PIN IT mở khoá Kiosk khẩn cấp',
+      description: 'Mã PIN khẩn cấp mở khoá tại chỗ màn hình Kiosk phòng khám khi có sự cố kỹ thuật hoặc mất mạng',
+      valueType: 'string',
+      isPublic: false,
+    },
+    {
+      key: 'kiosk.qrExpiresSeconds',
+      value: 90,
+      group: 'kiosk',
+      label: 'Thời gian hiệu lực mã QR Kiosk (giây)',
+      description: 'Thời gian sống của mỗi mã QR động và mã hiện diện 4 số trước khi tự động đổi mới',
+      valueType: 'number',
+      isPublic: true,
+    },
+
     // Hệ thống
     { key: 'system.sessionHours', value: 12, group: 'system', label: 'Thời gian phiên đăng nhập (giờ)', valueType: 'number' },
     { key: 'system.passwordMinLength', value: 6, group: 'system', label: 'Độ dài mật khẩu tối thiểu', valueType: 'number', isPublic: true },

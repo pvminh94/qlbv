@@ -138,7 +138,7 @@ export class KioskController {
   @Post('override-pin')
   @ApiOperation({ summary: 'Mở khoá khẩn cấp tại chỗ bằng mã PIN IT' })
   async overridePin(@Body() body: { roomCode: string; pin: string; terminalId?: string; reason?: string }) {
-    const masterPin = process.env.IT_MASTER_PIN || '999888';
+    const masterPin = await this.service.getItMasterPin();
     if (body.pin !== masterPin) {
       throw new UnauthorizedException('Mã PIN khẩn cấp IT không chính xác.');
     }

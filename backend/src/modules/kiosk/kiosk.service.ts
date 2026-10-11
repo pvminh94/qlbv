@@ -17,6 +17,7 @@ import {
   userBiometrics,
   users,
 } from '../../db/schema';
+import { SettingsService } from '../settings/settings.service';
 import { IntegrationDutyService } from '../integration/integration-duty.service';
 import { bangkokToday, shiftInterval } from '../duty/duty-rules';
 import { coversInstant, bangkokIso } from '../integration/integration-time';
@@ -57,12 +58,26 @@ export class KioskService {
   constructor(
     private readonly db: DbService,
     private readonly integrationDuty: IntegrationDutyService,
+    private readonly settings: SettingsService,
   ) {
     if (!fs.existsSync(this.uploadDir)) {
       try {
         fs.mkdirSync(this.uploadDir, { recursive: true });
       } catch {}
     }
+  }
+
+  /**
+   * Lấy mã PIN IT khẩn cấp từ CSDL (Quản trị cài đặt trên giao diện) hoặc fallback biến môi trường .env
+   */
+  async getItMasterPin(): Promise<string> {
+    try {
+      const dbPin = await this.settings.get<string>('kiosk.itMasterPin');
+      if (dbPin && typeof dbPin === 'string' && dbPin.trim().length > 0) {
+        return dbPin.trim();
+      }
+    } catch {}
+    return (process.env.IT_MASTER_PIN || '999888').trim();
   }
 
   private get aiServiceUrl(): string {
