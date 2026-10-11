@@ -54,7 +54,11 @@ export class KioskService {
   }
 
   private get aiServiceUrl(): string {
-    return (process.env.AI_SERVICE_URL || 'http://localhost:8001').replace(/\/+$/, '');
+    return (
+      process.env.AI_SERVICE_URL ||
+      process.env.BIOMETRIC_AI_SERVICE_URL ||
+      'http://localhost:8001'
+    ).replace(/\/+$/, '');
   }
 
   // --- 1. QUẢN LÝ PHIÊN QR & REALTIME SSE CHO PHÒNG KHÁM ---

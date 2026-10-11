@@ -74,7 +74,8 @@ services:
       STORAGE_DIR: /app/uploads
       EXPORTS_DIR: /app/backups/exports
       BACKUPS_DIR: /app/backups
-      BIOMETRIC_AI_SERVICE_URL: ${BIOMETRIC_AI_SERVICE_URL:-http://localhost:8001}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-${BIOMETRIC_AI_SERVICE_URL:-http://localhost:8001}}
+      BIOMETRIC_AI_SERVICE_URL: ${AI_SERVICE_URL:-${BIOMETRIC_AI_SERVICE_URL:-http://localhost:8001}}
     volumes:
       - ${UPLOAD_HOST_DIR:-./data/uploads}:/app/uploads
       - ${BACKUP_HOST_DIR:-./data/backups}:/app/backups

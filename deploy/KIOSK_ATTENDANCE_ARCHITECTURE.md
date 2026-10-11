@@ -117,5 +117,5 @@ sudo bash deploy/update.sh
 3. **Tự động chạy Migration CSDL:** Khi container `qlbs-api` khởi động, entrypoint trong `backend/Dockerfile` tự động kích hoạt `scripts/migrate.ts` để áp dụng ngay các tệp migration mới (`0019_kiosk_duty_attendance.sql`) vào PostgreSQL. Người quản trị không cần gõ lệnh migration thủ công.
 4. **Tự động kiểm tra sức khỏe:** Kiểm tra điểm cuối `/health` của API và trang web đăng nhập trước khi hoàn tất thông báo `✓ Cập nhật xong`.
 
-*(Nếu muốn đổi IP kết nối tới VPS 2, thêm dòng `BIOMETRIC_AI_SERVICE_URL=http://<IP_VPS_2>:8001` vào file `.env` tại thư mục gốc trước khi chạy `update.sh`).*
+*(Nếu muốn đổi IP kết nối tới VPS 2, thêm dòng `AI_SERVICE_URL=http://<IP_VPS_2>:8001` vào file `.env` tại thư mục gốc trước khi chạy `update.sh`).*
 
