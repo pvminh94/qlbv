@@ -1,0 +1,343 @@
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Camera, CheckCircle2, RefreshCw, Upload, User, AlertCircle, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
+import { Dialog } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/card';
+
+interface BiometricEnrollDialogProps {
+  user: {
+    id: number;
+    username: string;
+    fullName: string;
+    title?: string | null;
+  } | null;
+  open: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+export function BiometricEnrollDialog({ user, open, onClose, onSuccess }: BiometricEnrollDialogProps) {
+  const [mode, setMode] = useState<'camera' | 'upload'>('camera');
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Trạng thái đã đăng ký
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [bioStatus, setBioStatus] = useState<{ enrolled: boolean; avatarUrl: string | null } | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 1. Nạp trạng thái đăng ký hiện tại của nhân viên
+  useEffect(() => {
+    if (!open || !user) return;
+    setCapturedImage(null);
+    setCameraError(null);
+
+    const fetchStatus = async () => {
+      setStatusLoading(true);
+      try {
+        const resp = await fetch(`/api/kiosk/biometrics/status/${user.id}`);
+        if (resp.ok) {
+          const raw = await resp.json();
+          const data = raw?.data ?? raw;
+          setBioStatus(data);
+        }
+      } catch (err) {
+        console.warn('Lỗi nạp trạng thái sinh trắc học:', err);
+      } finally {
+        setStatusLoading(false);
+      }
+    };
+
+    fetchStatus();
+  }, [open, user]);
+
+  // 2. Khởi động Webcam khi chuyển sang mode camera
+  const startWebcam = async () => {
+    setCameraError(null);
+    setCapturedImage(null);
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: 'user' },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (err: any) {
+      console.warn('Lỗi mở camera:', err);
+      setCameraError('Không thể mở Camera trên thiết bị này. Vui lòng cấp quyền hoặc sử dụng chức năng tải tệp ảnh chân dung.');
+      setCameraActive(false);
+    }
+  };
+
+  const stopWebcam = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraActive(false);
+  };
+
+  useEffect(() => {
+    if (open && mode === 'camera' && !capturedImage) {
+      startWebcam();
+    } else {
+      stopWebcam();
+    }
+    return () => stopWebcam();
+  }, [open, mode, capturedImage]);
+
+  // 3. Chụp ảnh từ video stream
+  const handleCapture = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 480;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const b64 = canvas.toDataURL('image/jpeg', 0.90);
+    setCapturedImage(b64);
+    stopWebcam();
+  };
+
+  // 4. Chọn ảnh từ file
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Vui lòng chọn tệp hình ảnh (.jpg, .png)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setCapturedImage(event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 5. Gửi lên máy chủ lưu vào CSDL & AI Engine
+  const handleSubmit = async () => {
+    if (!user || !capturedImage) return;
+
+    setIsSubmitting(true);
+    try {
+      const resp = await fetch('/api/kiosk/enroll', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          imageBase64: capturedImage,
+        }),
+      });
+
+      const raw = await resp.json();
+      const data = raw?.data ?? raw;
+
+      if (!resp.ok) {
+        throw new Error(data.message || 'Lỗi lưu sinh trắc học.');
+      }
+
+      toast.success(`Đã lưu hồ sơ sinh trắc học thành công cho ${user.title || ''} ${user.fullName}`);
+      setBioStatus({
+        enrolled: true,
+        avatarUrl: `/api/kiosk/doctors/${user.id}/avatar?t=${Date.now()}`,
+      });
+      onSuccess?.();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || 'Không thể lưu sinh trắc học.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Đăng ký Sinh trắc học Khuôn mặt"
+      size="md"
+      footer={
+        <div className="flex items-center justify-between w-full">
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+            Đóng
+          </Button>
+          <Button
+            disabled={!capturedImage || isSubmitting}
+            loading={isSubmitting}
+            onClick={handleSubmit}
+            className="bg-teal-600 hover:bg-teal-500 text-white"
+          >
+            <ShieldCheck className="h-4 w-4 mr-1.5" />
+            Lưu hồ sơ sinh trắc học
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {/* Thông tin nhân viên */}
+        <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-900/50 p-3 border border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-800 flex items-center justify-center border border-slate-300 dark:border-slate-700">
+              {bioStatus?.avatarUrl ? (
+                <img src={bioStatus.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+              ) : (
+                <User className="h-6 w-6 text-slate-400" />
+              )}
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {user.title ? `${user.title} ` : ''}{user.fullName}
+              </div>
+              <div className="text-xs font-mono text-slate-500">@{user.username}</div>
+            </div>
+          </div>
+
+          <div>
+            {statusLoading ? (
+              <RefreshCw className="h-4 w-4 animate-spin text-slate-400" />
+            ) : bioStatus?.enrolled ? (
+              <Badge tone="success" className="text-[11px] flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" /> Đã đăng ký
+              </Badge>
+            ) : (
+              <Badge tone="warning" className="text-[11px]">
+                Chưa có dữ liệu
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Tab chọn hình thức: Webcam hoặc Tải file */}
+        <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800/80 p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setMode('camera');
+              setCapturedImage(null);
+            }}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${
+              mode === 'camera'
+                ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Camera className="h-3.5 w-3.5" />
+            Chụp trực tiếp từ Webcam
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('upload');
+              stopWebcam();
+            }}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${
+              mode === 'upload'
+                ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Tải tệp ảnh chân dung
+          </button>
+        </div>
+
+        {/* Khu vực hiển thị Video hoặc Ảnh xem trước */}
+        <div className="relative aspect-square w-full max-w-[320px] mx-auto rounded-2xl overflow-hidden bg-black border-2 border-teal-500/40 flex items-center justify-center shadow-inner">
+          {capturedImage ? (
+            <div className="relative w-full h-full">
+              <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
+              <div className="absolute bottom-2 left-0 right-0 flex justify-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setCapturedImage(null);
+                    if (mode === 'camera') startWebcam();
+                  }}
+                  className="bg-black/70 backdrop-blur-md text-white border-slate-600 text-xs hover:bg-black/90"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 mr-1" /> Chụp / Chọn lại
+                </Button>
+              </div>
+            </div>
+          ) : mode === 'camera' ? (
+            <>
+              {cameraError ? (
+                <div className="p-4 text-center text-xs text-rose-300 space-y-2">
+                  <AlertCircle className="h-8 w-8 mx-auto text-rose-400 mb-1" />
+                  <p>{cameraError}</p>
+                </div>
+              ) : (
+                <>
+                  <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover -scale-x-100" />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-44 h-56 rounded-[50%] border-2 border-dashed border-teal-400/80 animate-pulse"></div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCapture}
+                    disabled={!cameraActive}
+                    className="absolute bottom-3 py-2 px-5 rounded-full bg-teal-600 hover:bg-teal-500 active:scale-95 text-white font-bold text-xs shadow-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Chụp ảnh ngay
+                  </button>
+                </>
+              )}
+            </>
+          ) : (
+            <div className="p-6 text-center space-y-3">
+              <div className="h-16 w-16 mx-auto rounded-2xl bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center">
+                <Upload className="h-8 w-8" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-300">Tải ảnh chân dung rõ mặt (.jpg, .png)</p>
+                <p className="text-[11px] text-slate-500">Ảnh thẳng góc, rõ nét, đủ ánh sáng</p>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-teal-600 hover:bg-teal-500 text-white text-xs"
+              >
+                Chọn tệp từ máy tính
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="text-[11px] text-slate-500 dark:text-slate-400 text-center">
+          Dữ liệu khuôn mặt được AI trích xuất vector 128 chiều, mã hoá <strong>AES-256</strong> lưu tại máy chủ bệnh viện và tuân thủ Nghị định 13/2023/NĐ-CP.
+        </div>
+      </div>
+    </Dialog>
+  );
+}

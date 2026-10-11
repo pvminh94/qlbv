@@ -114,7 +114,6 @@ export class KioskController {
     @Body()
     body: {
       sessionId: string;
-      handshakePin?: string;
       snapshotBase64?: string;
       imageBase64?: string;
       completedChallenges?: string[];
@@ -123,15 +122,21 @@ export class KioskController {
     },
   ) {
     const image = body.snapshotBase64 || body.imageBase64 || '';
-    const challenges = body.completedChallenges || body.livenessChallenges || ['BLINK'];
+    const challenges = body.completedChallenges || body.livenessChallenges || ['PASSIVE_LIVENESS'];
 
     return this.service.verifyFaceAndUnlock({
       sessionId: body.sessionId,
-      handshakePin: body.handshakePin,
       snapshotBase64: image,
       completedChallenges: challenges,
       deviceInfo: body.deviceInfo,
     });
+  }
+
+  @Public()
+  @Get('biometrics/status/:userId')
+  @ApiOperation({ summary: 'Kiểm tra trạng thái đăng ký sinh trắc học của nhân viên' })
+  async getBiometricStatus(@Param('userId') userId: string) {
+    return this.service.getBiometricStatus(parseInt(userId, 10));
   }
 
   @Public()

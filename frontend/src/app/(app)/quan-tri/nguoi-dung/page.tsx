@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
+  Camera,
   Crown,
   Eye,
   FileUp,
@@ -18,6 +19,7 @@ import { toast } from 'sonner';
 import { CrudTable, type CrudField } from '@/components/shared/crud-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { UserImportDialog } from '@/components/users/user-import-dialog';
+import { BiometricEnrollDialog } from '@/components/users/biometric-enroll-dialog';
 import { Badge, Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
@@ -138,6 +140,7 @@ export default function UsersPage() {
   const [permKeyword, setPermKeyword] = useState('');
   const [resetTarget, setResetTarget] = useState<Record<string, unknown> | null>(null);
   const [unlockTarget, setUnlockTarget] = useState<Record<string, unknown> | null>(null);
+  const [biometricTarget, setBiometricTarget] = useState<Record<string, unknown> | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
@@ -341,6 +344,17 @@ export default function UsersPage() {
             {can('user.view') ? (
               <Button variant="ghost" size="icon" title="Xem quyền hiệu lực" onClick={() => { setPermKeyword(''); setPermsTarget(row); }}>
                 <Eye />
+              </Button>
+            ) : null}
+            {can('user.update') ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Đăng ký sinh trắc học khuôn mặt"
+                onClick={() => setBiometricTarget(row)}
+                className="text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/50"
+              >
+                <Camera className="size-4" />
               </Button>
             ) : null}
             {can('user.assign-role') ? (
@@ -630,6 +644,12 @@ export default function UsersPage() {
         </p>
       </Dialog>
       <UserImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+      <BiometricEnrollDialog
+        user={biometricTarget as any}
+        open={!!biometricTarget}
+        onClose={() => setBiometricTarget(null)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['/users'] })}
+      />
     </>
   );
 }

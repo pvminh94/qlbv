@@ -394,29 +394,20 @@ export class KioskService {
 
   async verifyFaceAndUnlock(params: {
     sessionId: string;
-    handshakePin?: string;
     snapshotBase64: string;
-    completedChallenges: string[];
+    completedChallenges?: string[];
     deviceInfo?: string;
   }) {
-    const { sessionId, handshakePin, snapshotBase64, completedChallenges, deviceInfo } = params;
+    const { sessionId, snapshotBase64, completedChallenges, deviceInfo } = params;
 
     const session = this.getSession(sessionId);
     if (!session || session.status !== 'WAITING') {
       throw new BadRequestException('Phiên quét QR không hợp lệ hoặc đã hết hạn. Vui lòng quét lại trên màn hình phòng khám.');
     }
 
-    // 0. BẢO MẬT HIỆN DIỆN VẬT LÝ (Physical Co-Presence Proof):
-    // Bác sĩ bắt buộc phải nhìn lên màn hình máy tính phòng khám để lấy mã 4 số đang hiển thị
-    const inputPin = handshakePin?.toString().trim();
-    if (!inputPin || inputPin !== session.handshakePin) {
-      throw new BadRequestException(
-        'Mã xác thực hiện diện (4 số) không chính xác! Bác sĩ vui lòng nhìn trực tiếp lên màn hình máy tính phòng khám để nhập đúng mã 4 số đang hiển thị.',
-      );
-    }
-
-    // 1. Gọi AI Engine kiểm tra người thật ISO 30107 PAD
-    const liveness = await this.verifyLivenessWithAi(snapshotBase64, completedChallenges);
+    // 1. Gọi AI Engine kiểm tra người thật ISO 30107 PAD (Passive Liveness)
+    const challenges = completedChallenges || ['PASSIVE_LIVENESS'];
+    const liveness = await this.verifyLivenessWithAi(snapshotBase64, challenges);
     if (!liveness.isLive) {
       throw new BadRequestException(`AI từ chối: Phát hiện hình ảnh giả mạo (${liveness.reason}).`);
     }
@@ -589,6 +580,32 @@ export class KioskService {
       success: true,
       message: `Đã lưu hồ sơ sinh trắc học cho ${user.title} ${user.fullName}`,
       avatarPath: `/uploads/faces/${filename}`,
+    };
+  }
+
+  async getBiometricStatus(userId: number) {
+    const list = await this.db.db
+      .select({
+        id: userBiometrics.id,
+        userId: userBiometrics.userId,
+        avatarPath: userBiometrics.avatarPath,
+        enrolledAt: userBiometrics.enrolledAt,
+        updatedAt: userBiometrics.updatedAt,
+      })
+      .from(userBiometrics)
+      .where(eq(userBiometrics.userId, userId))
+      .limit(1);
+
+    const bio = list[0];
+    if (!bio) {
+      return { enrolled: false, avatarUrl: null };
+    }
+
+    return {
+      enrolled: true,
+      avatarUrl: `/api/kiosk/doctors/${userId}/avatar?t=${new Date(bio.updatedAt).getTime()}`,
+      enrolledAt: bio.enrolledAt,
+      updatedAt: bio.updatedAt,
     };
   }
 

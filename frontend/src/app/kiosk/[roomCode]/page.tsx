@@ -576,7 +576,7 @@ export default function KioskPage() {
             </div>
           </div>
 
-          {/* Cột phải: Mã QR động & Mã xác thực hiện diện */}
+          {/* Cột phải: Mã QR động */}
           <div className="flex flex-col items-center justify-center">
             <div className="relative p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-teal-500/30 flex items-center justify-center min-w-[260px] min-h-[260px]">
               <canvas ref={qrCanvasRef} className={!qrUrl ? 'hidden' : 'block'} />
@@ -588,23 +588,7 @@ export default function KioskPage() {
               )}
             </div>
 
-            {/* Mã xác thực hiện diện 4 số (Live Visual Handshake PIN) */}
-            {handshakePin && (
-              <div className="mt-3.5 w-full max-w-[260px] px-4 py-2.5 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border-2 border-teal-500/40 text-center shadow-lg">
-                <div className="text-[10px] font-bold text-teal-800 dark:text-teal-300 uppercase tracking-wider flex items-center justify-center gap-1.5 mb-0.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-                  <span>Mã hiện diện tại phòng</span>
-                </div>
-                <div className="text-3xl font-black font-mono tracking-[0.25em] text-teal-700 dark:text-teal-300 py-0.5">
-                  {handshakePin}
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Nhập 4 số này trên điện thoại để mở máy
-                </div>
-              </div>
-            )}
-
-            <div className="mt-3 flex items-center gap-3 text-xs opacity-75">
+            <div className="mt-4 flex items-center gap-3 text-xs opacity-75">
               <span>Hết hạn sau: <strong className="font-mono text-teal-600 dark:text-teal-400">{expiresInSeconds}s</strong></span>
               <button
                 type="button"

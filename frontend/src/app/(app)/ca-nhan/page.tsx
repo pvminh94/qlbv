@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, LogOut, Monitor, Save, Send, ShieldCheck, Unlink, User } from 'lucide-react';
+import { Camera, CheckCircle2, KeyRound, LogOut, Monitor, Save, Send, ShieldCheck, Unlink, User } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Badge, Card, Skeleton } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
+import { BiometricEnrollDialog } from '@/components/users/biometric-enroll-dialog';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDateTime, toList } from '@/lib/utils';
@@ -134,10 +135,17 @@ export default function ProfilePage() {
   const user = useAuth((s) => s.user);
   const logout = useAuth((s) => s.logout);
   const [form, setForm] = useState<Record<string, unknown>>({});
+  const [enrollOpen, setEnrollOpen] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: () => apiFetch<Profile>('/auth/profile'),
+  });
+
+  const { data: bioStatus, refetch: refetchBioStatus } = useQuery({
+    queryKey: ['my-biometric-status', profile?.id],
+    enabled: !!profile?.id,
+    queryFn: () => apiFetch<{ enrolled: boolean; avatarUrl: string | null }>(`/kiosk/biometrics/status/${profile?.id}`),
   });
 
   const { data: sessions } = useQuery({
@@ -222,6 +230,44 @@ export default function ProfilePage() {
             <TelegramCard />
 
             <Card>
+              <div className="flex items-center justify-between border-b px-4 py-3 text-sm font-semibold">
+                <div className="flex items-center gap-2">
+                  <Camera className="size-4 text-teal-600" /> Sinh trắc học khuôn mặt
+                </div>
+                {bioStatus?.enrolled ? (
+                  <Badge tone="success" className="text-[11px] flex items-center gap-1">
+                    <CheckCircle2 className="size-3" /> Đã đăng ký
+                  </Badge>
+                ) : (
+                  <Badge tone="warning" className="text-[11px]">Chưa đăng ký</Badge>
+                )}
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="size-12 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800 border flex items-center justify-center shrink-0">
+                    {bioStatus?.avatarUrl ? (
+                      <img src={bioStatus.avatarUrl} alt="Face Avatar" className="size-full object-cover" />
+                    ) : (
+                      <User className="size-6 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="text-xs text-[var(--muted-foreground)]">
+                    Khuôn mặt được dùng để điểm danh nhận ca trực và tự động mở khoá máy tính tại các phòng khám bệnh viện.
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEnrollOpen(true)}
+                  className="w-full text-xs text-teal-700 dark:text-teal-300 border-teal-500/30 hover:bg-teal-50 dark:hover:bg-teal-950/40"
+                >
+                  <Camera className="size-3.5 mr-1 text-teal-600" />
+                  {bioStatus?.enrolled ? 'Cập nhật lại khuôn mặt' : 'Đăng ký khuôn mặt ngay'}
+                </Button>
+              </div>
+            </Card>
+
+            <Card>
               <div className="flex items-center gap-2 border-b px-4 py-3 text-sm font-semibold">
                 <ShieldCheck className="size-4" /> Vai trò & quyền
               </div>
@@ -298,6 +344,17 @@ export default function ProfilePage() {
             </Card>
           </div>
         </div>
+      )}
+
+      {profile && (
+        <BiometricEnrollDialog
+          user={profile}
+          open={enrollOpen}
+          onClose={() => setEnrollOpen(false)}
+          onSuccess={() => {
+            void refetchBioStatus();
+          }}
+        />
       )}
     </div>
   );
